@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+requests
+anthropic
+python-dotenv
+pytest

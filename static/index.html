@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentProof AI</title>
+  <style>
+    :root { color-scheme: light; --ink:#17243a; --muted:#607089; --line:#dce4ef; --blue:#2457c5; --green:#137547; --red:#b42332; --amber:#946200; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#f3f6fb; color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    header { padding:28px max(24px,calc((100vw - 1180px)/2)); background:#102a56; color:white; }
+    header h1 { margin:0; font-size:26px; letter-spacing:-.4px; }
+    header p { margin:4px 0 0; color:#d5e2fb; }
+    main { max-width:1180px; margin:24px auto; padding:0 20px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-items:start; }
+    section { min-width:0; background:white; border:1px solid var(--line); border-radius:12px; padding:20px; box-shadow:0 3px 12px #16345c0a; }
+    section.audit { grid-column:1/-1; }
+    h2 { margin:0 0 14px; font-size:18px; }
+    label { display:block; margin:12px 0 5px; font-size:13px; font-weight:650; }
+    input,textarea { width:100%; padding:10px 11px; border:1px solid #c8d3e2; border-radius:7px; color:var(--ink); font:inherit; background:#fff; }
+    textarea { resize:vertical; }
+    button { border:0; border-radius:7px; padding:9px 13px; margin:12px 6px 0 0; background:var(--blue); color:white; font:inherit; font-weight:600; font-size:14px; cursor:pointer; }
+    button:hover { filter:brightness(.93); }
+    button.secondary { background:#e9eef8; color:#203657; }
+    button.danger { background:#a92b38; }
+    .status { padding:10px 12px; border-radius:8px; margin:12px 0; font-weight:700; }
+    .status.ALLOW,.status.good { color:#095b35; background:#e6f6ed; }
+    .status.BLOCK,.status.bad { color:#9d1727; background:#fff0f0; }
+    .status.NEEDS_APPROVAL,.status.warn { color:#795000; background:#fff5da; }
+    .status.neutral { background:#edf2f8; color:#45556c; }
+    .result-card { margin-top:14px; padding:13px; border:1px solid var(--line); border-radius:9px; }
+    .result-card p { margin:6px 0; }
+    .approval { display:inline-block; margin-top:8px; color:#174ea6; font-weight:700; }
+    .small { color:var(--muted); font-size:13px; }
+    .event-list { display:grid; gap:9px; margin-top:12px; }
+    .event { display:grid; grid-template-columns:minmax(150px,1fr) minmax(0,3fr) auto; gap:10px; align-items:start; padding:11px; border:1px solid var(--line); border-radius:8px; }
+    .event-type { font-weight:700; }
+    .event-data { margin:0; color:#4d5b70; font:12px/1.45 ui-monospace,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .event button { margin:0; white-space:nowrap; }
+    .empty { color:var(--muted); padding:12px 0; }
+    #mandateStatus { margin-top:12px; }
+    @media(max-width:720px) { main { grid-template-columns:1fr; } section.audit { grid-column:auto; } .event { grid-template-columns:1fr; } }
+    @media print { body { background:#fff; } header { padding:15px; } main { display:block; margin:10px auto; } section { box-shadow:none; break-inside:avoid; } button { display:none; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>AgentProof AI</h1>
+    <p>Clear authorization. Policy-checked purchases. Verifiable activity.</p>
+  </header>
+  <main>
+    <section>
+      <h2>Mandate</h2>
+      <form id="mandateForm">
+        <label for="budget">Maximum total (USD)</label>
+        <input id="budget" type="number" min="0.01" step="0.01" value="50" required>
+        <label for="categories">Allowed categories <span class="small">(comma-separated)</span></label>
+        <input id="categories" value="books" required>
+        <label for="merchants">Allowed merchants <span class="small">(comma-separated)</span></label>
+        <input id="merchants" value="Demo Store" required>
+        <label for="expiry">Expires at (ISO date/time)</label>
+        <input id="expiry" value="2027-01-01T00:00:00+00:00" required>
+        <button type="submit">Create &amp; sign mandate</button>
+      </form>
+      <div id="mandateStatus" class="status neutral">No mandate loaded.</div>
+      <div id="mandateDetails" class="small"></div>
+    </section>
+    <section>
+      <h2>Shopping agent</h2>
+      <label for="request">What should the agent buy?</label>
+      <textarea id="request" rows="3" placeholder="For example: Find me a book about gardening">Buy a book</textarea>
+      <button id="runAgent">Run Agent</button>
+      <button id="rogueAgent" class="secondary">Rogue Agent</button>
+      <div id="agentResult" class="small">Run the agent to see its decision and evidence.</div>
+    </section>
+    <section class="audit">
+      <h2>Audit Log</h2>
+      <div id="chainStatus" class="status neutral">Checking audit chain…</div>
+      <button id="verifyLog" class="secondary">Verify</button>
+      <button id="tamperLog" class="danger">Tamper Log</button>
+      <div id="eventList" class="event-list"><div class="empty">Loading events…</div></div>
+    </section>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, ch => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;"
+    }[ch]));
+    async function api(url, options = {}) {
+      const response = await fetch(url, options);
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
+      return body;
+    }
+    function showError(element, error) {
+      element.className = "status BLOCK";
+      element.textContent = error.message || String(error);
+    }
+    function commaList(value) { return value.split(",").map(item => item.trim()).filter(Boolean); }
+
+    $("mandateForm").addEventListener("submit", async event => {
+      event.preventDefault();
+      const status = $("mandateStatus");
+      try {
+        const signed = await api("/mandate", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            budget:Number($("budget").value),
+            allowed_categories:commaList($("categories").value),
+            allowed_merchants:commaList($("merchants").value),
+            expires_at:$("expiry").value
+          })
+        });
+        status.className = "status good";
+        status.textContent = "Signed — mandate signature stored.";
+        $("mandateDetails").textContent = `Signature: ${signed.signature}`;
+        await refreshLog();
+      } catch (error) { showError(status, error); }
+    });
+
+    async function loadMandate() {
+      const status = $("mandateStatus");
+      try {
+        const saved = await api("/mandate");
+        if (!saved) {
+          status.className = "status neutral";
+          status.textContent = "No mandate loaded.";
+          return;
+        }
+        status.className = "status good";
+        status.textContent = saved.signature ? "Signed — mandate signature stored." : "Mandate found; signature unavailable.";
+        $("budget").value = saved.mandate.max_total;
+        $("categories").value = saved.mandate.allowed_categories.join(", ");
+        $("merchants").value = saved.mandate.allowed_merchants.join(", ");
+        $("expiry").value = saved.mandate.expires_at;
+        $("mandateDetails").textContent = `Signature: ${saved.signature || "unavailable"}`;
+      } catch (error) { showError(status, error); }
+    }
+
+    async function runAgent(rogue) {
+      const result = $("agentResult");
+      result.className = "status neutral";
+      result.textContent = "Agent is working…";
+      try {
+        const data = await api("/agent/run", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({request:$("request").value, rogue})
+        });
+        const decision = data.decision || "UNKNOWN";
+        const tone = ["ALLOW","BLOCK","NEEDS_APPROVAL"].includes(decision) ? decision : "neutral";
+        result.className = `result-card status ${tone}`;
+        result.innerHTML = `<strong>${escapeHtml(decision)}</strong>
+          <p>${escapeHtml(data.reason)}</p>
+          <p>${escapeHtml(data.reasoning || "")}</p>
+          ${data.order_id ? `<p>Order: ${escapeHtml(data.order_id)}</p>` : ""}
+          ${data.approval_link ? `<a class="approval" href="${escapeHtml(data.approval_link)}" target="_blank" rel="noopener">Approve order in PayPal Sandbox ↗</a>` : ""}
+          <p class="small">Purchase ID: ${escapeHtml(data.purchase_id)}</p>`;
+        await refreshLog();
+      } catch (error) { showError(result, error); }
+    }
+    $("runAgent").addEventListener("click", () => runAgent(false));
+    $("rogueAgent").addEventListener("click", () => runAgent(true));
+
+    async function verifyChain() {
+      const banner = $("chainStatus");
+      try {
+        const result = await api("/log/verify");
+        if (result.valid) {
+          banner.className = "status good";
+          banner.textContent = "Chain intact";
+        } else {
+          banner.className = "status bad";
+          banner.textContent = `Chain BROKEN at entry ${result.broken_entry_id}`;
+        }
+      } catch (error) { showError(banner, error); }
+    }
+    async function refreshLog() {
+      try {
+        const events = await api("/log");
+        const list = $("eventList");
+        list.replaceChildren();
+        const purchaseIds = [...new Set(events.map(event => event.purchase_id).filter(Boolean))];
+        for (const event of [...events].reverse()) {
+          const row = document.createElement("article");
+          row.className = "event";
+          const timestamp = new Date(event.ts * 1000).toLocaleString();
+          const detail = document.createElement("pre");
+          detail.className = "event-data";
+          detail.textContent = JSON.stringify(event.data, null, 2);
+          const title = document.createElement("div");
+          title.innerHTML = `<div class="event-type">${escapeHtml(event.event_type)}</div><div class="small">${escapeHtml(timestamp)}</div><div class="small">#${event.id}</div>`;
+          row.append(title, detail);
+          if (purchaseIds.includes(event.purchase_id)) {
+            const button = document.createElement("button");
+            button.className = "secondary";
+            button.textContent = "Dispute report";
+            button.addEventListener("click", () => openReport(event.purchase_id));
+            row.append(button);
+          }
+          list.append(row);
+        }
+        if (!events.length) list.innerHTML = '<div class="empty">No events recorded yet.</div>';
+        await verifyChain();
+      } catch (error) {
+        $("eventList").textContent = error.message || String(error);
+      }
+    }
+    $("verifyLog").addEventListener("click", verifyChain);
+    $("tamperLog").addEventListener("click", async () => {
+      try {
+        await api("/log/tamper", {method:"POST"});
+        await refreshLog();
+      } catch (error) { showError($("chainStatus"), error); }
+    });
+
+    async function openReport(purchaseId) {
+      const reportWindow = window.open("", "_blank");
+      if (!reportWindow) {
+        alert("Allow pop-ups to open the dispute report.");
+        return;
+      }
+      reportWindow.document.write("<p style='font:16px system-ui;padding:24px'>Building report…</p>");
+      try {
+        const data = await api(`/dispute/${encodeURIComponent(purchaseId)}`);
+        const rows = [
+          ["Original request", data.request],
+          ["Agent reasoning", data.reasoning],
+          ["Mandate terms", data.mandate ? JSON.stringify(data.mandate, null, 2) : "Not recorded"],
+          ["Policy decision", `${data.decision || "Not recorded"}${data.decision_reason ? ` — ${data.decision_reason}` : ""}`],
+          ["PayPal order ID", data.paypal_order_id],
+          ["PayPal capture ID", data.capture_id],
+          ["Audit chain", data.chain_intact ? "Intact" : "BROKEN"]
+        ];
+        reportWindow.document.open();
+        reportWindow.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AgentProof Dispute Report</title>
+          <style>body{font:15px/1.55 system-ui,sans-serif;color:#17243a;max-width:780px;margin:36px auto;padding:0 22px}header{border-bottom:2px solid #193d78;padding-bottom:15px}h1{font-size:25px;margin:0}header p{color:#617087}.summary{background:#f1f5fb;border-left:4px solid #2457c5;padding:14px;margin:20px 0}dl{margin:0}dt{font-weight:700;margin-top:16px}dd{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}.broken{color:#b42332;font-weight:700}.ok{color:#137547;font-weight:700}button{border:0;border-radius:6px;padding:9px 15px;background:#2457c5;color:#fff;cursor:pointer;margin:14px 0}@media print{body{margin:0 auto}button{display:none}}</style></head><body>
+          <header><h1>Purchase Dispute Report</h1><p>Purchase ID: ${escapeHtml(data.purchase_id)}</p></header>
+          <p class="summary">${escapeHtml(data.summary)}</p>
+          <dl>${rows.map(([label,value]) => `<dt>${escapeHtml(label)}</dt><dd class="${label === "Audit chain" ? (data.chain_intact ? "ok" : "broken") : ""}">${escapeHtml(value ?? "Not recorded")}</dd>`).join("")}</dl>
+          <button onclick="window.print()">Print report</button></body></html>`);
+        reportWindow.document.close();
+      } catch (error) {
+        reportWindow.document.body.textContent = `Could not build report: ${error.message || error}`;
+      }
+    }
+    loadMandate();
+    refreshLog();
+  </script>
+</body>
+</html>
