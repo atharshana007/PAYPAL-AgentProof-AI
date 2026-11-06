@@ -101,3 +101,14 @@ order through its returned approval link before capture can succeed.
   prompts; it is not a production autonomous purchasing system.
 Verifies an AI agent's final PayPal checkout against your original request before payment, warns on mismatches, and records an intent receipt linking request, decision, and transaction.
 
+
+## Run it locally
+
+uvicorn main:app --reload
+
+Open the app:
+- Default: http://127.0.0.1:8000
+- If port 8000 is already used by another project, run
+  `uvicorn main:app --reload --port 8001` and open http://127.0.0.1:8001
+
+API docs: http://127.0.0.1:8000/docs (or :8001/docs on the alternate port)
