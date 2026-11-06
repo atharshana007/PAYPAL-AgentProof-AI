@@ -99,3 +99,5 @@ order through its returned approval link before capture can succeed.
   multi-user authentication or isolation.
 - **Hardcoded agent:** The shopping agent uses a single tool and simple fixed
   prompts; it is not a production autonomous purchasing system.
+Verifies an AI agent's final PayPal checkout against your original request before payment, warns on mismatches, and records an intent receipt linking request, decision, and transaction.
+
