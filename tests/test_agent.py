@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
+from google import genai
 
 import agent
 import auditlog
@@ -14,6 +15,7 @@ def signed_mandate(monkeypatch, tmp_path):
     monkeypatch.setenv("DB_PATH", str(tmp_path / "agent-test.db"))
     monkeypatch.setenv("MANDATE_SECRET", "test-only-secret")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-api-key")
+    monkeypatch.setenv("AGENT_PROVIDER", "anthropic")
     auditlog.init_db()
     data = mandate.create_mandate(
         user="demo-user",
@@ -73,6 +75,7 @@ def test_allowed_purchase_is_checked_and_returned(monkeypatch, signed_mandate):
     result = agent.run_agent("Buy a book", rogue=False)
 
     assert result["decision"] == "ALLOW"
+    assert result["provider"] == "anthropic"
     assert result["reasoning"] == "A book fits your mandate."
     assert result["purchase_id"]
     assert result["order_id"] == "ORDER-123"
@@ -133,6 +136,7 @@ def test_no_tool_call_returns_clear_message(monkeypatch, signed_mandate):
 
 def test_missing_api_key_returns_clear_error(monkeypatch, tmp_path):
     monkeypatch.setenv("DB_PATH", str(tmp_path / "missing-key.db"))
+    monkeypatch.setenv("AGENT_PROVIDER", "anthropic")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     auditlog.init_db()
 
@@ -140,3 +144,222 @@ def test_missing_api_key_returns_clear_error(monkeypatch, tmp_path):
 
     assert result["decision"] == "ERROR"
     assert "ANTHROPIC_API_KEY" in result["reason"]
+    assert result["provider"] == "anthropic"
+
+
+def mock_gemini_response(monkeypatch, response):
+    calls = {}
+
+    class MockModels:
+        def generate_content(self, **kwargs):
+            calls.update(kwargs)
+            if isinstance(response, Exception):
+                raise response
+            return response
+
+    class MockClient:
+        def __init__(self, api_key):
+            assert api_key == "test-gemini-key"
+            self.models = MockModels()
+
+    monkeypatch.setattr(genai, "Client", MockClient)
+    monkeypatch.setenv("AGENT_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("GEMINI_MODEL", "test-gemini-model")
+    return calls
+
+
+def gemini_function_call(purchase):
+    return SimpleNamespace(
+        candidates=[
+            SimpleNamespace(
+                content=SimpleNamespace(
+                    parts=[
+                        SimpleNamespace(text="I checked the proposed purchase."),
+                        SimpleNamespace(
+                            text=None,
+                            function_call=SimpleNamespace(name="purchase", args=purchase),
+                        ),
+                    ]
+                )
+            )
+        ]
+    )
+
+
+def test_gemini_allowed_purchase_is_checked_without_automatic_execution(
+    monkeypatch, signed_mandate
+):
+    monkeypatch.setattr(paypal, "get_access_token", lambda: "test-access-token")
+    monkeypatch.setattr(
+        paypal,
+        "create_order",
+        lambda *args, **kwargs: {
+            "order_id": "GEMINI-ORDER",
+            "approval_link": "https://sandbox.example/gemini-approve",
+        },
+    )
+    purchase = {
+        "item": "Book",
+        "merchant": "Demo Store",
+        "category": "books",
+        "amount": 50,
+    }
+    calls = mock_gemini_response(monkeypatch, gemini_function_call(purchase))
+
+    result = agent.run_agent("Buy a book")
+
+    assert result["decision"] == "ALLOW"
+    assert result["provider"] == "gemini"
+    assert result["order_id"] == "GEMINI-ORDER"
+    assert calls["model"] == "test-gemini-model"
+    assert calls["config"].automatic_function_calling.disable
+    declarations = calls["config"].tools[0].function_declarations
+    assert len(declarations) == 1
+    assert declarations[0].name == "purchase"
+    assert declarations[0].parameters.required == [
+        "item",
+        "merchant",
+        "category",
+        "amount",
+    ]
+    events = [
+        event for event in auditlog.get_log()
+        if event["purchase_id"] == result["purchase_id"]
+    ]
+    assert [event["event_type"] for event in events][-2:] == [
+        "policy_decision",
+        "paypal_order_created",
+    ]
+
+
+def test_gemini_rogue_purchase_is_blocked_without_order(monkeypatch, signed_mandate):
+    calls = mock_gemini_response(
+        monkeypatch,
+        gemini_function_call(
+            {
+                "item": "Expensive laptop",
+                "merchant": "Demo Store",
+                "category": "electronics",
+                "amount": 500,
+            }
+        ),
+    )
+    created_orders = []
+    monkeypatch.setattr(paypal, "create_order", lambda *args, **kwargs: created_orders.append(args))
+
+    result = agent.run_agent("Buy something", rogue=True)
+
+    assert result["decision"] == "BLOCK"
+    assert result["provider"] == "gemini"
+    assert "category" in result["reason"]
+    assert "misbehave" in calls["config"].system_instruction
+    assert created_orders == []
+    policy_event = next(
+        event for event in auditlog.get_log()
+        if event["purchase_id"] == result["purchase_id"]
+        and event["event_type"] == "policy_decision"
+    )
+    assert policy_event["data"]["decision"] == "BLOCK"
+
+
+def test_gemini_without_function_call_returns_clear_message(monkeypatch, signed_mandate):
+    mock_gemini_response(
+        monkeypatch,
+        SimpleNamespace(
+            candidates=[
+                SimpleNamespace(
+                    content=SimpleNamespace(
+                        parts=[
+                            SimpleNamespace(
+                                text="I need more details before buying.",
+                                function_call=None,
+                            )
+                        ]
+                    )
+                )
+            ]
+        ),
+    )
+
+    result = agent.run_agent("Buy something")
+
+    assert result["decision"] == "NO_TOOL_CALL"
+    assert result["provider"] == "gemini"
+    assert "did not request a purchase" in result["reason"]
+    events = [
+        event for event in auditlog.get_log()
+        if event["purchase_id"] == result["purchase_id"]
+    ]
+    assert [event["event_type"] for event in events][-2:] == [
+        "agent_reasoning",
+        "agent_no_tool_call",
+    ]
+
+
+def test_missing_gemini_key_returns_friendly_error_without_exposing_key(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "missing-gemini-key.db"))
+    monkeypatch.setenv("AGENT_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "should-not-be-shown")
+    auditlog.init_db()
+
+    result = agent.run_agent("Buy a book")
+
+    assert result["decision"] == "ERROR"
+    assert result["provider"] == "gemini"
+    assert "GEMINI_API_KEY" in result["reason"]
+    assert "should-not-be-shown" not in result["reason"]
+
+
+def test_gemini_rate_limit_returns_friendly_message(monkeypatch, signed_mandate):
+    class RateLimitError(Exception):
+        code = 429
+
+    mock_gemini_response(monkeypatch, RateLimitError("private provider response"))
+
+    result = agent.run_agent("Buy a book")
+
+    assert result["decision"] == "ERROR"
+    assert result["provider"] == "gemini"
+    assert "rate limit" in result["reason"].lower()
+    assert "private provider response" not in result["reason"]
+    assert "test-gemini-key" not in result["reason"]
+
+
+def test_provider_auto_selects_gemini_before_anthropic(monkeypatch, signed_mandate):
+    monkeypatch.delenv("AGENT_PROVIDER", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-api-key")
+    monkeypatch.setattr(
+        agent,
+        "_generate_gemini",
+        lambda request, system_prompt: ("No purchase requested.", None),
+    )
+
+    result = agent.run_agent("Buy a book")
+
+    assert result["provider"] == "gemini"
+    assert result["decision"] == "NO_TOOL_CALL"
+
+
+def test_provider_defaults_to_mock_without_provider_keys(monkeypatch, signed_mandate):
+    monkeypatch.delenv("AGENT_PROVIDER", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(paypal, "get_access_token", lambda: "test-access-token")
+    monkeypatch.setattr(
+        paypal,
+        "create_order",
+        lambda *args, **kwargs: {
+            "order_id": "MOCK-ORDER",
+            "approval_link": "https://sandbox.example/mock-approve",
+        },
+    )
+
+    result = agent.run_agent("Buy a book")
+
+    assert result["provider"] == "mock"
+    assert result["decision"] == "ALLOW"

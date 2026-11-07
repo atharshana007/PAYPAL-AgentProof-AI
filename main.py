@@ -1,4 +1,6 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
+from collections.abc import AsyncIterator
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -16,7 +18,14 @@ import report
 
 auditlog.init_db()
 
-app = FastAPI(title="AgentProof AI")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    print("AgentProof AI running at http://127.0.0.1:8765", flush=True)
+    yield
+
+
+app = FastAPI(title="AgentProof AI", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -34,7 +43,15 @@ class AgentInput(BaseModel):
 
 @app.get("/")
 def home():
-    return FileResponse(Path("static") / "index.html")
+    return FileResponse(
+        Path("static") / "index.html",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/health")
+def health():
+    return {"app": "AgentProof AI", "port": 8765, "status": "ok"}
 
 
 @app.post("/mandate")

@@ -42,9 +42,15 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-Edit `.env` and set a private `MANDATE_SECRET` before seeding. To use the AI
-agent or PayPal Sandbox, also add your own `ANTHROPIC_API_KEY`,
-`PAYPAL_CLIENT_ID`, and `PAYPAL_SECRET`. Keep `.env` private; never commit it.
+Edit `.env` and set a private `MANDATE_SECRET` before seeding. For Gemini, set
+`GEMINI_API_KEY`; `GEMINI_MODEL` optionally selects a model and defaults to
+`gemini-2.5-flash`. For Anthropic, set `ANTHROPIC_API_KEY`. Set
+`AGENT_PROVIDER` to `gemini`, `anthropic`, or `mock` to choose explicitly.
+When it is unset, the app selects Gemini if `GEMINI_API_KEY` is present,
+otherwise Anthropic if `ANTHROPIC_API_KEY` is present, and otherwise uses a
+scripted mock agent that needs no model API key. To use PayPal Sandbox, also
+add your own `PAYPAL_CLIENT_ID` and `PAYPAL_SECRET`. Keep `.env` private; never
+commit it.
 
 Seed the demo database. The script displays the database path and requires you
 to type `RESET` before deleting or recreating it:
@@ -56,11 +62,12 @@ python seed_demo.py
 Start the app:
 
 ```powershell
-uvicorn main:app --reload
+.\run.ps1
 ```
 
-Open <http://127.0.0.1:8000>. Interactive API documentation is available at
-<http://127.0.0.1:8000/docs>. By default, SQLite is stored in `agentproof.db`;
+Open <http://127.0.0.1:8765>. Verify the app at
+<http://127.0.0.1:8765/health>. Interactive API documentation is available at
+<http://127.0.0.1:8765/docs>. By default, SQLite is stored in `agentproof.db`;
 set `DB_PATH` in `.env` to select another database file.
 
 ## Five-step demo walkthrough
@@ -104,11 +111,9 @@ Verifies an AI agent's final PayPal checkout against your original request befor
 
 ## Run it locally
 
-uvicorn main:app --reload
+Run `.\run.ps1` from PowerShell.
 
 Open the app:
-- Default: http://127.0.0.1:8000
-- If port 8000 is already used by another project, run
-  `uvicorn main:app --reload --port 8001` and open http://127.0.0.1:8001
+- Default: http://127.0.0.1:8765
 
-API docs: http://127.0.0.1:8000/docs (or :8001/docs on the alternate port)
+API docs: http://127.0.0.1:8765/docs

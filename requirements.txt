@@ -2,5 +2,6 @@ fastapi
 uvicorn[standard]
 requests
 anthropic
+google-genai
 python-dotenv
 pytest

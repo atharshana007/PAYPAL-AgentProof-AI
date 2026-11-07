@@ -3,245 +3,751 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0B2A4A">
   <title>AgentProof AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    :root { color-scheme: light; --ink:#17243a; --muted:#607089; --line:#dce4ef; --blue:#2457c5; --green:#137547; --red:#b42332; --amber:#946200; }
+    :root {
+      color-scheme: light;
+      --background:#F4F7FB;
+      --navy:#0B2A4A;
+      --blue:#1F5FBF;
+      --green:#1B7F4B;
+      --red:#B3261E;
+      --amber:#F2B63C;
+      --line:#D9E1EC;
+      --muted:#52677E;
+    }
     * { box-sizing:border-box; }
-    body { margin:0; background:#f3f6fb; color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
-    header { padding:28px max(24px,calc((100vw - 1180px)/2)); background:#102a56; color:white; }
-    header h1 { margin:0; font-size:26px; letter-spacing:-.4px; }
-    header p { margin:4px 0 0; color:#d5e2fb; }
-    main { max-width:1180px; margin:24px auto; padding:0 20px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; align-items:start; }
-    section { min-width:0; background:white; border:1px solid var(--line); border-radius:12px; padding:20px; box-shadow:0 3px 12px #16345c0a; }
-    section.audit { grid-column:1/-1; }
-    h2 { margin:0 0 14px; font-size:18px; }
-    label { display:block; margin:12px 0 5px; font-size:13px; font-weight:650; }
-    input,textarea { width:100%; padding:10px 11px; border:1px solid #c8d3e2; border-radius:7px; color:var(--ink); font:inherit; background:#fff; }
-    textarea { resize:vertical; }
-    button { border:0; border-radius:7px; padding:9px 13px; margin:12px 6px 0 0; background:var(--blue); color:white; font:inherit; font-weight:600; font-size:14px; cursor:pointer; }
-    button:hover { filter:brightness(.93); }
-    button.secondary { background:#e9eef8; color:#203657; }
-    button.danger { background:#a92b38; }
-    .status { padding:10px 12px; border-radius:8px; margin:12px 0; font-weight:700; }
-    .status.ALLOW,.status.good { color:#095b35; background:#e6f6ed; }
-    .status.BLOCK,.status.bad { color:#9d1727; background:#fff0f0; }
-    .status.NEEDS_APPROVAL,.status.warn { color:#795000; background:#fff5da; }
-    .status.neutral { background:#edf2f8; color:#45556c; }
-    .result-card { margin-top:14px; padding:13px; border:1px solid var(--line); border-radius:9px; }
-    .result-card p { margin:6px 0; }
-    .approval { display:inline-block; margin-top:8px; color:#174ea6; font-weight:700; }
+    body {
+      margin:0;
+      background:var(--background);
+      color:var(--navy);
+      font:16px/1.55 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+    }
+    header {
+      padding:22px max(24px,calc((100vw - 1240px)/2));
+      background:var(--navy);
+      color:#fff;
+    }
+    .header-inner {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:20px;
+      max-width:1240px;
+      margin:0 auto;
+    }
+    header h1 { margin:0; font-size:24px; line-height:1.3; font-weight:800; }
+    header p { margin:3px 0 0; color:#E1EAF4; }
+    .sandbox-badge {
+      flex:none;
+      padding:8px 13px;
+      border:1px solid var(--amber);
+      border-radius:999px;
+      background:var(--amber);
+      color:#342500;
+      font-size:13px;
+      font-weight:800;
+    }
+    main { max-width:1280px; margin:0 auto; padding:24px 20px 40px; }
+    .intro { margin:0 0 22px; color:#334D68; }
+    .card-grid {
+      display:grid;
+      grid-template-columns:repeat(3,minmax(320px,1fr));
+      gap:20px;
+      align-items:start;
+    }
+    .card {
+      min-width:0;
+      padding:24px;
+      border:1px solid var(--line);
+      border-radius:16px;
+      background:#fff;
+      box-shadow:0 8px 26px #0B2A4A12;
+    }
+    .step-heading { display:flex; align-items:center; gap:12px; margin:0 0 20px; }
+    .step-number {
+      display:grid;
+      place-items:center;
+      width:36px;
+      height:36px;
+      flex:none;
+      border-radius:50%;
+      background:var(--blue);
+      color:#fff;
+      font-weight:800;
+    }
+    h2 { margin:0; color:var(--navy); font-size:20px; line-height:1.3; }
+    label { display:block; margin:14px 0 6px; color:var(--navy); font-size:14px; font-weight:700; }
+    input,textarea {
+      display:block;
+      width:100%;
+      min-height:46px;
+      padding:10px 12px;
+      border:1px solid #B9C8D9;
+      border-radius:9px;
+      background:#fff;
+      color:var(--navy);
+      font:inherit;
+    }
+    textarea { min-height:100px; resize:vertical; }
+    button {
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-height:44px;
+      margin:12px 6px 0 0;
+      padding:9px 15px;
+      border:1px solid var(--blue);
+      border-radius:10px;
+      background:var(--blue);
+      color:#fff;
+      font:inherit;
+      font-weight:700;
+      cursor:pointer;
+    }
+    button:hover:not(:disabled) { filter:brightness(.94); }
+    button.secondary { border-color:var(--blue); background:#fff; color:var(--blue); }
+    button:disabled { cursor:wait; opacity:.65; }
+    :focus-visible { outline:3px solid var(--amber); outline-offset:3px; }
+    .button-row { display:flex; flex-wrap:wrap; gap:8px; }
+    .button-row button { margin:12px 0 0; }
+    .status,.decision-panel,.mandate-panel {
+      margin-top:16px;
+      padding:15px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#F0F4F8;
+      color:#314A63;
+    }
+    .status.good,.decision-panel.ALLOW,.mandate-panel {
+      border-color:#A9D6BA;
+      background:#EAF6EE;
+      color:#145C37;
+    }
+    .status.bad,.decision-panel.BLOCK,.status.BLOCK {
+      border-color:#EABAB5;
+      background:#FFF0EE;
+      color:#8F211B;
+    }
+    .decision-panel.NEEDS_APPROVAL,.status.warn {
+      border-color:#EACB7A;
+      background:#FFF7E2;
+      color:#5F460B;
+    }
+    .status.neutral { background:#F0F4F8; color:#314A63; }
+    .status { font-weight:700; }
+    .status-label { display:block; margin-bottom:3px; font-weight:800; }
+    .decision-title { display:block; font-size:24px; line-height:1.25; font-weight:800; }
+    .decision-panel p { margin:8px 0 0; }
+    .decision-reason { font-weight:600; }
+    .approval-link { display:inline-flex; align-items:center; min-height:44px; margin-top:10px; color:var(--blue); font-weight:800; }
     .small { color:var(--muted); font-size:13px; }
-    .event-list { display:grid; gap:9px; margin-top:12px; }
-    .event { display:grid; grid-template-columns:minmax(150px,1fr) minmax(0,3fr) auto; gap:10px; align-items:start; padding:11px; border:1px solid var(--line); border-radius:8px; }
-    .event-type { font-weight:700; }
-    .event-data { margin:0; color:#4d5b70; font:12px/1.45 ui-monospace,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
-    .event button { margin:0; white-space:nowrap; }
-    .empty { color:var(--muted); padding:12px 0; }
-    #mandateStatus { margin-top:12px; }
-    @media(max-width:720px) { main { grid-template-columns:1fr; } section.audit { grid-column:auto; } .event { grid-template-columns:1fr; } }
-    @media print { body { background:#fff; } header { padding:15px; } main { display:block; margin:10px auto; } section { box-shadow:none; break-inside:avoid; } button { display:none; } }
+    .mandate-panel { font-weight:500; }
+    .mandate-panel strong { display:block; margin-bottom:5px; font-size:17px; }
+    .mandate-panel p { margin:5px 0 0; }
+    .capture-status { margin-top:12px; font-weight:700; }
+    .audit-tools { display:flex; flex-wrap:wrap; gap:8px; }
+    .audit-tools button { margin:12px 0 0; }
+    .event-list { display:grid; gap:0; margin-top:20px; }
+    .event {
+      position:relative;
+      padding:0 0 18px 20px;
+      border-left:2px solid #D4DFEB;
+    }
+    .event:last-child { padding-bottom:0; border-left-color:transparent; }
+    .event::before {
+      position:absolute;
+      top:5px;
+      left:-6px;
+      width:10px;
+      height:10px;
+      border:2px solid #fff;
+      border-radius:50%;
+      background:var(--blue);
+      box-shadow:0 0 0 1px var(--blue);
+      content:"";
+    }
+    .event.broken { border-left-color:#E3A39E; color:#8F211B; }
+    .event.broken::before { background:var(--red); box-shadow:0 0 0 1px var(--red); }
+    .event-meta { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .event-number-name { min-width:0; }
+    .event-title { display:block; color:var(--navy); font-weight:800; overflow-wrap:anywhere; }
+    .event.broken .event-title { color:#8F211B; }
+    .event-hash { flex:none; color:#465C73; font:12px/1.5 ui-monospace,Consolas,monospace; }
+    .event-details { margin-top:7px; }
+    .event-details summary { color:var(--muted); font-size:13px; cursor:pointer; }
+    .event-data { margin:6px 0 0; color:#40566D; font-size:13px; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .event.broken .event-data { color:#8F211B; }
+    .event button { margin-top:9px; }
+    .empty { padding:12px 0; color:var(--muted); }
+    [hidden] { display:none !important; }
+    @media(max-width:1060px) {
+      .card-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    @media(max-width:700px) {
+      header { padding:20px; }
+      .header-inner { align-items:flex-start; flex-direction:column; gap:13px; }
+      main { padding:20px 14px 32px; }
+      .card-grid { grid-template-columns:minmax(0,1fr); gap:14px; }
+      .card { padding:20px; }
+    }
+    @media print {
+      body { background:#fff; }
+      header { padding:15px; }
+      main { display:block; margin:10px auto; }
+      .card { margin-bottom:12px; box-shadow:none; break-inside:avoid; }
+      button,.sandbox-badge { display:none; }
+    }
   </style>
 </head>
 <body>
   <header>
-    <h1>AgentProof AI</h1>
-    <p>Clear authorization. Policy-checked purchases. Verifiable activity.</p>
+    <div class="header-inner">
+      <div>
+        <h1>AgentProof AI</h1>
+        <p>The receipt for agent decisions</p>
+      </div>
+      <div class="sandbox-badge">Sandbox mode: no real money moves</div>
+    </div>
   </header>
   <main>
-    <section>
-      <h2>Mandate</h2>
-      <form id="mandateForm">
-        <label for="budget">Maximum total (USD)</label>
-        <input id="budget" type="number" min="0.01" step="0.01" value="50" required>
-        <label for="categories">Allowed categories <span class="small">(comma-separated)</span></label>
-        <input id="categories" value="books" required>
-        <label for="merchants">Allowed merchants <span class="small">(comma-separated)</span></label>
-        <input id="merchants" value="Demo Store" required>
-        <label for="expiry">Expires at (ISO date/time)</label>
-        <input id="expiry" value="2027-01-01T00:00:00+00:00" required>
-        <button type="submit">Create &amp; sign mandate</button>
-      </form>
-      <div id="mandateStatus" class="status neutral">No mandate loaded.</div>
-      <div id="mandateDetails" class="small"></div>
-    </section>
-    <section>
-      <h2>Shopping agent</h2>
-      <label for="request">What should the agent buy?</label>
-      <textarea id="request" rows="3" placeholder="For example: Find me a book about gardening">Buy a book</textarea>
-      <button id="runAgent">Run Agent</button>
-      <button id="rogueAgent" class="secondary">Rogue Agent</button>
-      <div id="agentResult" class="small">Run the agent to see its decision and evidence.</div>
-    </section>
-    <section class="audit">
-      <h2>Audit Log</h2>
-      <div id="chainStatus" class="status neutral">Checking audit chain…</div>
-      <button id="verifyLog" class="secondary">Verify</button>
-      <button id="tamperLog" class="danger">Tamper Log</button>
-      <div id="eventList" class="event-list"><div class="empty">Loading events…</div></div>
-    </section>
+    <p class="intro">Authorize what an AI agent may buy, watch every purchase get checked, then prove what happened.</p>
+    <div class="card-grid">
+      <section class="card" aria-labelledby="authorizeHeading">
+        <div class="step-heading">
+          <span class="step-number" aria-hidden="true">1</span>
+          <h2 id="authorizeHeading">Authorize</h2>
+        </div>
+        <form id="mandateForm">
+          <label for="budget">Maximum total (USD)</label>
+          <input id="budget" name="budget" type="number" min="0.01" step="0.01" value="50" required>
+          <label for="categories">Allowed categories <span class="small">(comma-separated)</span></label>
+          <input id="categories" name="categories" value="books" required>
+          <label for="merchants">Allowed merchants <span class="small">(comma-separated)</span></label>
+          <input id="merchants" name="merchants" value="Demo Store" required>
+          <label for="expiry">Mandate expires</label>
+          <input id="expiry" name="expiry" type="datetime-local" required>
+          <button id="createMandate" type="submit">Create mandate</button>
+        </form>
+        <div id="mandateStatus" class="status neutral" role="status" aria-live="polite">Loading saved mandate…</div>
+        <div id="mandateSummary" class="mandate-panel" hidden aria-live="polite"></div>
+      </section>
+
+      <section class="card" aria-labelledby="agentHeading">
+        <div class="step-heading">
+          <span class="step-number" aria-hidden="true">2</span>
+          <h2 id="agentHeading">Agent acts</h2>
+        </div>
+        <label for="request">What should the agent buy?</label>
+        <textarea id="request" name="request" rows="3" placeholder="For example: Find me a book about gardening">Buy a book</textarea>
+        <div class="button-row">
+          <button id="runAgent" type="button">Run Agent</button>
+          <button id="rogueAgent" class="secondary" type="button">Rogue Agent</button>
+        </div>
+        <div id="agentResult" class="empty" role="status" aria-live="polite">Run the agent to see its decision and evidence.</div>
+        <div id="capturePanel" class="status neutral" hidden>
+          <span id="capturePrompt">After approving the order in PayPal, return here to capture payment.</span>
+          <button id="capturePayment" type="button">Capture payment</button>
+          <div id="captureStatus" class="capture-status" role="status" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="proofHeading">
+        <div class="step-heading">
+          <span class="step-number" aria-hidden="true">3</span>
+          <h2 id="proofHeading">Prove it</h2>
+        </div>
+        <div id="chainStatus" class="status neutral" role="status" aria-live="polite">Checking audit chain…</div>
+        <div class="audit-tools">
+          <button id="verifyLog" class="secondary" type="button">Verify</button>
+          <button id="tamperLog" class="secondary" type="button">Tamper</button>
+        </div>
+        <div id="eventList" class="event-list" aria-live="polite">
+          <div class="empty">Loading audit events…</div>
+        </div>
+      </section>
+    </div>
   </main>
   <script>
     const $ = id => document.getElementById(id);
-    const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, ch => ({
+    const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character => ({
       "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;"
-    }[ch]));
+    }[character]));
+    let activeOrderId = null;
+    let expiryTimer = null;
+
+    class RequestError extends Error {}
+
     async function api(url, options = {}) {
-      const response = await fetch(url, options);
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
+      let response;
+      try {
+        response = await fetch(url, options);
+      } catch {
+        throw new RequestError("Couldn't reach AgentProof AI. Check that the server is running and try again.");
+      }
+      let body;
+      try {
+        body = await response.json();
+      } catch {
+        throw new RequestError(response.ok
+          ? "AgentProof AI returned an unexpected response. Please try again."
+          : `The request couldn't be completed (error ${response.status}). Please try again.`);
+      }
+      if (!response.ok) {
+        const detail = typeof body?.detail === "string" ? body.detail : "";
+        throw new RequestError(detail || "The request couldn't be completed. Please check the information and try again.");
+      }
       return body;
     }
-    function showError(element, error) {
-      element.className = "status BLOCK";
-      element.textContent = error.message || String(error);
+
+    function showMessage(element, message, tone = "bad") {
+      element.className = `status ${tone}`;
+      element.textContent = message;
     }
-    function commaList(value) { return value.split(",").map(item => item.trim()).filter(Boolean); }
+
+    function setBusy(buttons, busy, loadingText = "Working…") {
+      for (const button of buttons) {
+        if (busy) {
+          button.dataset.idleLabel = button.textContent;
+          button.disabled = true;
+          button.textContent = loadingText;
+        } else {
+          button.disabled = false;
+          if (button.dataset.idleLabel) {
+            button.textContent = button.dataset.idleLabel;
+            delete button.dataset.idleLabel;
+          }
+        }
+      }
+    }
+
+    function commaList(value) {
+      return value.split(",").map(item => item.trim()).filter(Boolean);
+    }
+
+    function localDateTimeValue(date) {
+      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 16);
+    }
+
+    function setDefaultExpiry() {
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + 7);
+      $("expiry").value = localDateTimeValue(expiry);
+    }
+
+    function expiryDateValue(value) {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function updateCountdown(expiry) {
+      const remaining = expiry.getTime() - Date.now();
+      const countdown = $("mandateCountdown");
+      if (!countdown) return;
+      if (remaining <= 0) {
+        countdown.textContent = "Expired";
+        return;
+      }
+      const totalMinutes = Math.floor(remaining / 60000);
+      const days = Math.floor(totalMinutes / 1440);
+      const hours = Math.floor((totalMinutes % 1440) / 60);
+      const minutes = totalMinutes % 60;
+      countdown.textContent = `${days}d ${hours}h ${minutes}m remaining`;
+    }
+
+    function displayMandate(saved) {
+      const status = $("mandateStatus");
+      const summary = $("mandateSummary");
+      const mandate = saved?.mandate;
+      if (!mandate) {
+        status.className = "status neutral";
+        status.textContent = "No signed mandate yet. Create one to authorize purchases.";
+        summary.hidden = true;
+        clearInterval(expiryTimer);
+        return;
+      }
+      $("budget").value = mandate.max_total;
+      $("categories").value = Array.isArray(mandate.allowed_categories) ? mandate.allowed_categories.join(", ") : "";
+      $("merchants").value = Array.isArray(mandate.allowed_merchants) ? mandate.allowed_merchants.join(", ") : "";
+      const expiresAt = expiryDateValue(mandate.expires_at);
+      if (expiresAt) $("expiry").value = localDateTimeValue(expiresAt);
+      status.className = "status good";
+      status.textContent = "Signed mandate is active.";
+      summary.replaceChildren();
+      const heading = document.createElement("strong");
+      heading.textContent = "Signed mandate";
+      const budget = document.createElement("p");
+      budget.textContent = `Budget: ${formatAmount(mandate.max_total)}`;
+      const expiry = document.createElement("p");
+      expiry.textContent = `Expires: ${expiresAt ? expiresAt.toLocaleString() : "date unavailable"}`;
+      const timer = document.createElement("p");
+      timer.className = "small";
+      timer.id = "mandateCountdown";
+      const signature = document.createElement("p");
+      signature.className = "small";
+      signature.textContent = `Signature: ${String(saved.signature || "").slice(0, 8) || "unavailable"}…`;
+      summary.append(heading, budget, expiry, timer, signature);
+      summary.hidden = false;
+      clearInterval(expiryTimer);
+      if (expiresAt) {
+        updateCountdown(expiresAt);
+        expiryTimer = setInterval(() => updateCountdown(expiresAt), 60000);
+      } else {
+        timer.textContent = "Countdown unavailable.";
+      }
+    }
+
+    function formatAmount(amount) {
+      const numeric = Number(amount);
+      return Number.isFinite(numeric)
+        ? new Intl.NumberFormat(undefined, {style:"currency", currency:"USD"}).format(numeric)
+        : "Amount unavailable";
+    }
 
     $("mandateForm").addEventListener("submit", async event => {
       event.preventDefault();
-      const status = $("mandateStatus");
+      const button = $("createMandate");
+      setBusy([button], true, "Creating…");
+      $("mandateStatus").className = "status neutral";
+      $("mandateStatus").textContent = "Signing and saving the mandate…";
       try {
-        const signed = await api("/mandate", {
-          method:"POST", headers:{"Content-Type":"application/json"},
+        const result = await api("/mandate", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
           body:JSON.stringify({
             budget:Number($("budget").value),
             allowed_categories:commaList($("categories").value),
             allowed_merchants:commaList($("merchants").value),
-            expires_at:$("expiry").value
+            expires_at:new Date($("expiry").value).toISOString()
           })
         });
-        status.className = "status good";
-        status.textContent = "Signed — mandate signature stored.";
-        $("mandateDetails").textContent = `Signature: ${signed.signature}`;
+        displayMandate(result);
         await refreshLog();
-      } catch (error) { showError(status, error); }
+      } catch (error) {
+        showMessage($("mandateStatus"), error instanceof RequestError ? error.message : "The mandate couldn't be created. Check the fields and try again.");
+      } finally {
+        setBusy([button], false);
+      }
     });
 
     async function loadMandate() {
-      const status = $("mandateStatus");
       try {
-        const saved = await api("/mandate");
-        if (!saved) {
-          status.className = "status neutral";
-          status.textContent = "No mandate loaded.";
-          return;
+        displayMandate(await api("/mandate"));
+      } catch (error) {
+        showMessage($("mandateStatus"), error instanceof RequestError ? error.message : "Couldn't load the saved mandate. Please try again.");
+      }
+    }
+
+    function renderDecision(data, purchase) {
+      const result = $("agentResult");
+      const decision = typeof data.decision === "string" ? data.decision : "UNKNOWN";
+      const tone = ["ALLOW","BLOCK","NEEDS_APPROVAL"].includes(decision) ? decision : "neutral";
+      result.className = `decision-panel ${tone}`;
+      result.replaceChildren();
+      const heading = document.createElement("strong");
+      heading.className = "decision-title";
+      heading.textContent = decision;
+      result.append(heading);
+      const reason = document.createElement("p");
+      reason.className = "decision-reason";
+      reason.textContent = data.reason || "No decision reason was provided.";
+      result.append(reason);
+      if (decision === "ALLOW") {
+        const details = document.createElement("p");
+        details.textContent = `Amount: ${formatAmount(purchase?.amount)} · Category: ${purchase?.category || "not recorded"}`;
+        result.append(details);
+      }
+      if (data.reasoning) {
+        const reasoning = document.createElement("p");
+        reasoning.className = "small";
+        reasoning.textContent = `Agent reasoning: ${data.reasoning}`;
+        result.append(reasoning);
+      }
+      if (data.order_id) {
+        activeOrderId = String(data.order_id);
+        $("captureStatus").textContent = "";
+        $("capturePanel").hidden = false;
+        const order = document.createElement("p");
+        order.textContent = `PayPal order: ${activeOrderId}. Approve it in PayPal, then return here to capture.`;
+        result.append(order);
+        if (data.approval_link) {
+          const approvalUrl = new URL(data.approval_link, window.location.href);
+          if (approvalUrl.protocol === "https:" || approvalUrl.protocol === "http:") {
+            const link = document.createElement("a");
+            link.className = "approval-link";
+            link.href = approvalUrl.href;
+            link.target = "_blank";
+            link.rel = "noopener";
+            link.textContent = "Approve in PayPal sandbox ↗";
+            link.addEventListener("click", () => {
+              $("captureStatus").textContent = "Approve the order in PayPal, then choose Capture payment here.";
+            });
+            result.append(link);
+          }
         }
-        status.className = "status good";
-        status.textContent = saved.signature ? "Signed — mandate signature stored." : "Mandate found; signature unavailable.";
-        $("budget").value = saved.mandate.max_total;
-        $("categories").value = saved.mandate.allowed_categories.join(", ");
-        $("merchants").value = saved.mandate.allowed_merchants.join(", ");
-        $("expiry").value = saved.mandate.expires_at;
-        $("mandateDetails").textContent = `Signature: ${saved.signature || "unavailable"}`;
-      } catch (error) { showError(status, error); }
+      } else {
+        activeOrderId = null;
+        $("capturePanel").hidden = true;
+      }
+      const purchaseId = document.createElement("p");
+      purchaseId.className = "small";
+      purchaseId.textContent = `Purchase ID: ${data.purchase_id || "not recorded"}`;
+      result.append(purchaseId);
     }
 
     async function runAgent(rogue) {
+      const buttons = [$("runAgent"), $("rogueAgent")];
+      setBusy(buttons, true, "Agent working…");
       const result = $("agentResult");
       result.className = "status neutral";
-      result.textContent = "Agent is working…";
+      result.textContent = "Checking the request against the mandate…";
+      $("capturePanel").hidden = true;
+      activeOrderId = null;
       try {
         const data = await api("/agent/run", {
-          method:"POST", headers:{"Content-Type":"application/json"},
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
           body:JSON.stringify({request:$("request").value, rogue})
         });
-        const decision = data.decision || "UNKNOWN";
-        const tone = ["ALLOW","BLOCK","NEEDS_APPROVAL"].includes(decision) ? decision : "neutral";
-        result.className = `result-card status ${tone}`;
-        result.innerHTML = `<strong>${escapeHtml(decision)}</strong>
-          <p>${escapeHtml(data.reason)}</p>
-          <p>${escapeHtml(data.reasoning || "")}</p>
-          ${data.order_id ? `<p>Order: ${escapeHtml(data.order_id)}</p>` : ""}
-          ${data.approval_link ? `<a class="approval" href="${escapeHtml(data.approval_link)}" target="_blank" rel="noopener">Approve order in PayPal Sandbox ↗</a>` : ""}
-          <p class="small">Purchase ID: ${escapeHtml(data.purchase_id)}</p>`;
-        await refreshLog();
-      } catch (error) { showError(result, error); }
+        const events = await fetchEvents();
+        const policyEvent = events.find(item =>
+          item.purchase_id === data.purchase_id && item.event_type === "policy_decision"
+        );
+        renderDecision(data, policyEvent?.data?.purchase);
+        renderEvents(events);
+        await verifyChain();
+      } catch (error) {
+        showMessage(result, error instanceof RequestError ? error.message : "The agent couldn't complete this request. Please try again.");
+      } finally {
+        setBusy(buttons, false);
+      }
     }
     $("runAgent").addEventListener("click", () => runAgent(false));
     $("rogueAgent").addEventListener("click", () => runAgent(true));
 
+    $("capturePayment").addEventListener("click", async () => {
+      if (!activeOrderId) {
+        $("captureStatus").textContent = "Run the agent and approve an order before capturing.";
+        return;
+      }
+      const button = $("capturePayment");
+      setBusy([button], true, "Capturing…");
+      $("captureStatus").textContent = "Requesting payment capture from PayPal Sandbox…";
+      try {
+        const result = await api(`/paypal/capture/${encodeURIComponent(activeOrderId)}`, {method:"POST"});
+        $("captureStatus").textContent = `Order status: ${result.status}. Capture ID: ${result.capture_id}.`;
+        await refreshLog();
+      } catch (error) {
+        $("captureStatus").textContent = error instanceof RequestError
+          ? error.message
+          : "Payment couldn't be captured. Confirm the PayPal order was approved, then try again.";
+      } finally {
+        setBusy([button], false);
+      }
+    });
+
+    const readableEventNames = {
+      "mandate_created":"Mandate created",
+      "agent_request":"Agent request",
+      "mandate_used":"Mandate checked",
+      "agent_reasoning":"Agent reasoning",
+      "agent_no_tool_call":"No purchase requested",
+      "policy_decision":"Policy decision",
+      "paypal_order_created":"PayPal order created",
+      "paypal_order_failed":"PayPal order failed",
+      "paypal_captured":"PayPal captured"
+    };
+
+    function eventName(event) {
+      if (event.event_type === "policy_decision" && event.data?.decision) {
+        return `Policy: ${event.data.decision}`;
+      }
+      return readableEventNames[event.event_type] || String(event.event_type || "Audit event").replaceAll("_", " ");
+    }
+
+    function readableAuditData(value, prefix = "") {
+      if (value === null || value === undefined) return prefix ? [`${prefix}: not recorded`] : [];
+      if (Array.isArray(value)) {
+        return [`${prefix}: ${value.map(item => typeof item === "object" ? "[details]" : String(item)).join(", ")}`];
+      }
+      if (typeof value === "object") {
+        return Object.entries(value).flatMap(([key, item]) =>
+          readableAuditData(item, prefix ? `${prefix} · ${key}` : key)
+        );
+      }
+      return [`${prefix}: ${String(value)}`];
+    }
+
+    function renderEvents(events, brokenEntryId = null) {
+      const list = $("eventList");
+      list.replaceChildren();
+      if (!events.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No events yet. Create a mandate to begin.";
+        list.append(empty);
+        return;
+      }
+      const reportPurchases = new Set();
+      for (const event of [...events].reverse()) {
+        const row = document.createElement("article");
+        row.className = "event";
+        row.dataset.entryId = String(event.id);
+        if (String(event.id) === String(brokenEntryId)) row.classList.add("broken");
+
+        const meta = document.createElement("div");
+        meta.className = "event-meta";
+        const titleGroup = document.createElement("div");
+        titleGroup.className = "event-number-name";
+        const title = document.createElement("span");
+        title.className = "event-title";
+        title.textContent = `Entry ${event.id}: ${eventName(event)}`;
+        titleGroup.append(title);
+        const hash = document.createElement("code");
+        hash.className = "event-hash";
+        hash.textContent = String(event.hash || "").slice(0, 8) || "no hash";
+        meta.append(titleGroup, hash);
+        row.append(meta);
+
+        const detailLines = readableAuditData(event.data);
+        if (detailLines.length) {
+          const details = document.createElement("details");
+          details.className = "event-details";
+          const summary = document.createElement("summary");
+          summary.textContent = "Event details";
+          const content = document.createElement("p");
+          content.className = "event-data";
+          content.textContent = detailLines.join("\n");
+          details.append(summary, content);
+          row.append(details);
+        }
+
+        if (event.purchase_id && !reportPurchases.has(event.purchase_id)) {
+          reportPurchases.add(event.purchase_id);
+          const reportButton = document.createElement("button");
+          reportButton.type = "button";
+          reportButton.textContent = "Dispute report";
+          reportButton.addEventListener("click", () => openReport(event.purchase_id, reportButton));
+          row.append(reportButton);
+        }
+        list.append(row);
+      }
+    }
+
+    async function fetchEvents() {
+      const events = await api("/log");
+      if (!Array.isArray(events)) throw new RequestError("The audit log couldn't be read. Please refresh and try again.");
+      return events;
+    }
+
     async function verifyChain() {
       const banner = $("chainStatus");
+      const button = $("verifyLog");
+      setBusy([button], true, "Verifying…");
       try {
         const result = await api("/log/verify");
         if (result.valid) {
-          banner.className = "status good";
-          banner.textContent = "Chain intact";
+          showMessage(banner, "Chain intact", "good");
+          document.querySelectorAll(".event").forEach(row => row.classList.remove("broken"));
         } else {
-          banner.className = "status bad";
-          banner.textContent = `Chain BROKEN at entry ${result.broken_entry_id}`;
+          showMessage(banner, `Chain BROKEN at entry ${result.broken_entry_id}`, "bad");
+          document.querySelectorAll(".event").forEach(row => {
+            row.classList.toggle("broken", row.dataset.entryId === String(result.broken_entry_id));
+          });
         }
-      } catch (error) { showError(banner, error); }
-    }
-    async function refreshLog() {
-      try {
-        const events = await api("/log");
-        const list = $("eventList");
-        list.replaceChildren();
-        const purchaseIds = [...new Set(events.map(event => event.purchase_id).filter(Boolean))];
-        for (const event of [...events].reverse()) {
-          const row = document.createElement("article");
-          row.className = "event";
-          const timestamp = new Date(event.ts * 1000).toLocaleString();
-          const detail = document.createElement("pre");
-          detail.className = "event-data";
-          detail.textContent = JSON.stringify(event.data, null, 2);
-          const title = document.createElement("div");
-          title.innerHTML = `<div class="event-type">${escapeHtml(event.event_type)}</div><div class="small">${escapeHtml(timestamp)}</div><div class="small">#${event.id}</div>`;
-          row.append(title, detail);
-          if (purchaseIds.includes(event.purchase_id)) {
-            const button = document.createElement("button");
-            button.className = "secondary";
-            button.textContent = "Dispute report";
-            button.addEventListener("click", () => openReport(event.purchase_id));
-            row.append(button);
-          }
-          list.append(row);
-        }
-        if (!events.length) list.innerHTML = '<div class="empty">No events recorded yet.</div>';
-        await verifyChain();
+        return result;
       } catch (error) {
-        $("eventList").textContent = error.message || String(error);
+        showMessage(banner, error instanceof RequestError ? error.message : "Couldn't verify the audit chain. Please try again.");
+        return null;
+      } finally {
+        setBusy([button], false);
       }
     }
+
+    async function refreshLog() {
+      const list = $("eventList");
+      list.replaceChildren();
+      const loading = document.createElement("div");
+      loading.className = "empty";
+      loading.textContent = "Loading audit events…";
+      list.append(loading);
+      try {
+        const events = await fetchEvents();
+        renderEvents(events);
+        await verifyChain();
+      } catch (error) {
+        list.replaceChildren();
+        const message = document.createElement("div");
+        message.className = "status bad";
+        message.textContent = error instanceof RequestError ? error.message : "Couldn't load the audit log. Please try again.";
+        list.append(message);
+      }
+    }
+
     $("verifyLog").addEventListener("click", verifyChain);
     $("tamperLog").addEventListener("click", async () => {
+      const button = $("tamperLog");
+      setBusy([button], true, "Tampering…");
       try {
         await api("/log/tamper", {method:"POST"});
         await refreshLog();
-      } catch (error) { showError($("chainStatus"), error); }
+      } catch (error) {
+        showMessage($("chainStatus"), error instanceof RequestError ? error.message : "The audit log couldn't be changed. Please try again.");
+      } finally {
+        setBusy([button], false);
+      }
     });
 
-    async function openReport(purchaseId) {
+    async function openReport(purchaseId, button) {
       const reportWindow = window.open("", "_blank");
       if (!reportWindow) {
-        alert("Allow pop-ups to open the dispute report.");
+        $("chainStatus").textContent = "Allow pop-ups to open the dispute report.";
         return;
       }
-      reportWindow.document.write("<p style='font:16px system-ui;padding:24px'>Building report…</p>");
+      reportWindow.document.write("<!doctype html><title>Dispute report</title><p style='font:16px system-ui;padding:24px'>Building your report…</p>");
+      setBusy([button], true, "Building…");
       try {
         const data = await api(`/dispute/${encodeURIComponent(purchaseId)}`);
         const rows = [
           ["Original request", data.request],
           ["Agent reasoning", data.reasoning],
-          ["Mandate terms", data.mandate ? JSON.stringify(data.mandate, null, 2) : "Not recorded"],
+          ["Mandate terms", data.mandate ? readableAuditData(data.mandate).join("\n") : "Not recorded"],
           ["Policy decision", `${data.decision || "Not recorded"}${data.decision_reason ? ` — ${data.decision_reason}` : ""}`],
           ["PayPal order ID", data.paypal_order_id],
           ["PayPal capture ID", data.capture_id],
-          ["Audit chain", data.chain_intact ? "Intact" : "BROKEN"]
+          ["Audit chain", data.chain_intact ? "Chain intact" : "Chain BROKEN"]
         ];
         reportWindow.document.open();
         reportWindow.document.write(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AgentProof Dispute Report</title>
-          <style>body{font:15px/1.55 system-ui,sans-serif;color:#17243a;max-width:780px;margin:36px auto;padding:0 22px}header{border-bottom:2px solid #193d78;padding-bottom:15px}h1{font-size:25px;margin:0}header p{color:#617087}.summary{background:#f1f5fb;border-left:4px solid #2457c5;padding:14px;margin:20px 0}dl{margin:0}dt{font-weight:700;margin-top:16px}dd{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}.broken{color:#b42332;font-weight:700}.ok{color:#137547;font-weight:700}button{border:0;border-radius:6px;padding:9px 15px;background:#2457c5;color:#fff;cursor:pointer;margin:14px 0}@media print{body{margin:0 auto}button{display:none}}</style></head><body>
+          <style>
+            *{box-sizing:border-box}body{font:16px/1.55 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#0B2A4A;max-width:780px;margin:36px auto;padding:0 24px}
+            header{border-bottom:2px solid #0B2A4A;padding:0 0 16px}h1{font-size:25px;margin:0}header p{color:#52677E;margin:5px 0 0}
+            .summary{background:#F4F7FB;border-left:4px solid #1F5FBF;padding:14px;margin:20px 0;white-space:pre-wrap}
+            dl{margin:0}dt{font-weight:800;margin-top:16px}dd{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
+            .broken{color:#B3261E;font-weight:800}.ok{color:#1B7F4B;font-weight:800}
+            button{min-height:44px;border:0;border-radius:10px;padding:9px 15px;background:#1F5FBF;color:white;font:inherit;font-weight:700;cursor:pointer;margin:20px 0}
+            @media print{body{margin:0 auto;padding:0}button{display:none}.summary{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+          </style></head><body>
           <header><h1>Purchase Dispute Report</h1><p>Purchase ID: ${escapeHtml(data.purchase_id)}</p></header>
-          <p class="summary">${escapeHtml(data.summary)}</p>
+          <p class="summary">${escapeHtml(data.summary || "No summary was provided.")}</p>
           <dl>${rows.map(([label,value]) => `<dt>${escapeHtml(label)}</dt><dd class="${label === "Audit chain" ? (data.chain_intact ? "ok" : "broken") : ""}">${escapeHtml(value ?? "Not recorded")}</dd>`).join("")}</dl>
-          <button onclick="window.print()">Print report</button></body></html>`);
+          <button type="button" onclick="window.print()">Print report</button></body></html>`);
         reportWindow.document.close();
       } catch (error) {
-        reportWindow.document.body.textContent = `Could not build report: ${error.message || error}`;
+        reportWindow.document.body.textContent = error instanceof RequestError
+          ? error.message
+          : "The dispute report couldn't be created. Please try again.";
+      } finally {
+        setBusy([button], false);
       }
     }
+
+    setDefaultExpiry();
     loadMandate();
     refreshLog();
   </script>
