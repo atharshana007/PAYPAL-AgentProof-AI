@@ -65,8 +65,12 @@ Start the app:
 .\run.ps1
 ```
 
+<<<<<<< HEAD
 Open <http://127.0.0.1:8765>. Verify the app at
 <http://127.0.0.1:8765/health>. Interactive API documentation is available at
+=======
+Open<http://127.0.0.1:8765>Interactive API documentation is available at
+>>>>>>> 0a050a6b17ee52b284351a60225c657ad120f86e
 <http://127.0.0.1:8765/docs>. By default, SQLite is stored in `agentproof.db`;
 set `DB_PATH` in `.env` to select another database file.
 
