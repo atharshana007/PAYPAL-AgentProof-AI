@@ -59,8 +59,8 @@ Start the app:
 uvicorn main:app --reload
 ```
 
-Open <http://127.0.0.1:8000>. Interactive API documentation is available at
-<http://127.0.0.1:8000/docs>. By default, SQLite is stored in `agentproof.db`;
+Open<http://127.0.0.1:8765>Interactive API documentation is available at
+<http://127.0.0.1:8765/docs>. By default, SQLite is stored in `agentproof.db`;
 set `DB_PATH` in `.env` to select another database file.
 
 ## Five-step demo walkthrough
