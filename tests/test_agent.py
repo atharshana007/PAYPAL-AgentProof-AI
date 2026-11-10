@@ -48,13 +48,19 @@ def mock_response(monkeypatch, content):
 
 def test_allowed_purchase_is_checked_and_returned(monkeypatch, signed_mandate):
     monkeypatch.setattr(paypal, "get_access_token", lambda: "test-access-token")
+    created_orders = []
+
+    def create_order(*args, **kwargs):
+        created_orders.append((args, kwargs))
+        return {
+            "order_id": "ORDER-123",
+            "approval_link": "https://sandbox.example/approve",
+        }
+
     monkeypatch.setattr(
         paypal,
         "create_order",
-        lambda *args, **kwargs: {
-            "order_id": "ORDER-123",
-            "approval_link": "https://sandbox.example/approve",
-        },
+        create_order,
     )
     calls = mock_response(
         monkeypatch,
@@ -67,6 +73,7 @@ def test_allowed_purchase_is_checked_and_returned(monkeypatch, signed_mandate):
                     "merchant": "Demo Store",
                     "category": "books",
                     "amount": 50,
+                    "currency": "INR",
                 },
             ),
         ],
@@ -80,6 +87,7 @@ def test_allowed_purchase_is_checked_and_returned(monkeypatch, signed_mandate):
     assert result["purchase_id"]
     assert result["order_id"] == "ORDER-123"
     assert result["approval_link"] == "https://sandbox.example/approve"
+    assert created_orders[0][1]["currency"] == "INR"
     assert calls["tools"][0]["name"] == "purchase"
     events = [event for event in auditlog.get_log() if event["purchase_id"] == result["purchase_id"]]
     assert [event["event_type"] for event in events] == [
@@ -103,6 +111,7 @@ def test_rogue_purchase_is_blocked(monkeypatch, signed_mandate):
                     "merchant": "Demo Store",
                     "category": "electronics",
                     "amount": 500,
+                    "currency": "INR",
                 },
             ),
         ],
@@ -113,6 +122,80 @@ def test_rogue_purchase_is_blocked(monkeypatch, signed_mandate):
     assert result["decision"] == "BLOCK"
     assert "category" in result["reason"]
     assert "misbehave" in calls["system"]
+
+
+def test_selected_currency_cannot_override_signed_mandate(
+    monkeypatch, signed_mandate
+):
+    generated = []
+    monkeypatch.setattr(
+        agent,
+        "_generate_anthropic",
+        lambda request, system_prompt: generated.append(True),
+    )
+
+    result = agent.run_agent("Buy a book", currency="USD")
+
+    assert result["decision"] == "BLOCK"
+    assert "signed mandate" in result["reason"]
+    assert generated == []
+    event = next(
+        event
+        for event in auditlog.get_log()
+        if event["purchase_id"] == result["purchase_id"]
+        and event["event_type"] == "policy_decision"
+    )
+    assert event["data"]["currency"] == "USD"
+
+
+def test_usd_signed_mandate_creates_usd_paypal_order(monkeypatch, signed_mandate):
+    current = signed_mandate["mandate"]
+    usd_mandate = mandate.create_mandate(
+        user=current["user"],
+        max_total=current["max_total"],
+        allowed_categories=current["allowed_categories"],
+        allowed_merchants=current["allowed_merchants"],
+        expires_at=current["expires_at"],
+        currency="USD",
+    )
+    saved = {
+        "mandate": usd_mandate,
+        "signature": mandate.sign_mandate(usd_mandate),
+    }
+    monkeypatch.setattr(mandate, "get_current", lambda: saved)
+    monkeypatch.setattr(paypal, "get_access_token", lambda: "test-access-token")
+    created_orders = []
+    monkeypatch.setattr(
+        paypal,
+        "create_order",
+        lambda *args, **kwargs: created_orders.append(kwargs)
+        or {
+            "order_id": "USD-ORDER",
+            "approval_link": "https://sandbox.example/usd-approve",
+        },
+    )
+    mock_response(
+        monkeypatch,
+        [
+            SimpleNamespace(type="text", text="A book fits your mandate."),
+            SimpleNamespace(
+                type="tool_use",
+                input={
+                    "item": "Book",
+                    "merchant": "Demo Store",
+                    "category": "books",
+                    "amount": 50,
+                    "currency": "USD",
+                },
+            ),
+        ],
+    )
+
+    result = agent.run_agent("Buy a book", currency="USD")
+
+    assert result["decision"] == "ALLOW"
+    assert result["currency"] == "USD"
+    assert created_orders == [{"currency": "USD", "description": "Book"}]
 
 
 def test_no_tool_call_returns_clear_message(monkeypatch, signed_mandate):
@@ -204,6 +287,7 @@ def test_gemini_allowed_purchase_is_checked_without_automatic_execution(
         "merchant": "Demo Store",
         "category": "books",
         "amount": 50,
+        "currency": "INR",
     }
     calls = mock_gemini_response(monkeypatch, gemini_function_call(purchase))
 
@@ -222,6 +306,7 @@ def test_gemini_allowed_purchase_is_checked_without_automatic_execution(
         "merchant",
         "category",
         "amount",
+        "currency",
     ]
     events = [
         event for event in auditlog.get_log()
@@ -242,6 +327,7 @@ def test_gemini_rogue_purchase_is_blocked_without_order(monkeypatch, signed_mand
                 "merchant": "Demo Store",
                 "category": "electronics",
                 "amount": 500,
+                "currency": "INR",
             }
         ),
     )
@@ -363,3 +449,9 @@ def test_provider_defaults_to_mock_without_provider_keys(monkeypatch, signed_man
 
     assert result["provider"] == "mock"
     assert result["decision"] == "ALLOW"
+
+
+def test_mock_proposal_uses_india_currency_without_a_mandate():
+    _, purchase = agent._generate_mock("Buy a book", None, rogue=False)
+
+    assert purchase["currency"] == "INR"

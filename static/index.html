@@ -52,6 +52,36 @@
       font-size:13px;
       font-weight:800;
     }
+    .header-controls {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .country-select {
+      min-height:44px;
+      max-width:100%;
+      padding:8px 34px 8px 12px;
+      border:1px solid #C6D4E3;
+      border-radius:10px;
+      background:#fff;
+      color:var(--navy);
+      font:600 14px/1.3 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+      cursor:pointer;
+    }
+    .country-status { flex-basis:100%; margin:0; color:#E1EAF4; text-align:right; }
+    .visually-hidden {
+      position:absolute;
+      width:1px;
+      height:1px;
+      padding:0;
+      margin:-1px;
+      overflow:hidden;
+      clip:rect(0,0,0,0);
+      white-space:nowrap;
+      border:0;
+    }
     main { max-width:1280px; margin:0 auto; padding:24px 20px 40px; }
     .intro { margin:0 0 22px; color:#334D68; }
     .card-grid {
@@ -149,6 +179,7 @@
     .mandate-panel { font-weight:500; }
     .mandate-panel strong { display:block; margin-bottom:5px; font-size:17px; }
     .mandate-panel p { margin:5px 0 0; }
+    .currency-notice { margin:12px 0 0; }
     .capture-status { margin-top:12px; font-weight:700; }
     .audit-tools { display:flex; flex-wrap:wrap; gap:8px; }
     .audit-tools button { margin:12px 0 0; }
@@ -191,6 +222,9 @@
     @media(max-width:700px) {
       header { padding:20px; }
       .header-inner { align-items:flex-start; flex-direction:column; gap:13px; }
+      .header-controls { width:100%; align-items:flex-start; flex-direction:column; }
+      .country-select { width:100%; }
+      .country-status { text-align:left; }
       main { padding:20px 14px 32px; }
       .card-grid { grid-template-columns:minmax(0,1fr); gap:14px; }
       .card { padding:20px; }
@@ -211,7 +245,15 @@
         <h1>AgentProof AI</h1>
         <p>The receipt for agent decisions</p>
       </div>
-      <div class="sandbox-badge">Sandbox mode: no real money moves</div>
+      <div class="header-controls">
+        <label class="visually-hidden" for="countrySelector">Country and currency</label>
+        <select id="countrySelector" class="country-select">
+          <option value="IN">🇮🇳 India — Indian Rupee (INR ₹)</option>
+          <option value="US">🇺🇸 United States — US Dollar (USD $)</option>
+        </select>
+        <p id="countryPreferenceStatus" class="country-status small" role="status" aria-live="polite"></p>
+        <div class="sandbox-badge">Sandbox mode: no real money moves</div>
+      </div>
     </div>
   </header>
   <main>
@@ -223,7 +265,7 @@
           <h2 id="authorizeHeading">Authorize</h2>
         </div>
         <form id="mandateForm">
-          <label for="budget">Maximum total (USD)</label>
+          <label id="budgetLabel" for="budget">Maximum total (INR ₹)</label>
           <input id="budget" name="budget" type="number" min="0.01" step="0.01" value="50" required>
           <label for="categories">Allowed categories <span class="small">(comma-separated)</span></label>
           <input id="categories" name="categories" value="books" required>
@@ -233,6 +275,7 @@
           <input id="expiry" name="expiry" type="datetime-local" required>
           <button id="createMandate" type="submit">Create mandate</button>
         </form>
+        <p id="currencyNotice" class="small currency-notice" role="status" aria-live="polite">Amounts use the selected currency directly. No currency conversion is applied.</p>
         <div id="mandateStatus" class="status neutral" role="status" aria-live="polite">Loading saved mandate…</div>
         <div id="mandateSummary" class="mandate-panel" hidden aria-live="polite"></div>
       </section>
@@ -274,11 +317,83 @@
   </main>
   <script>
     const $ = id => document.getElementById(id);
+    const countryOptions = {
+      IN: {currency:"INR", locale:"en-IN", label:"India"},
+      US: {currency:"USD", locale:"en-US", label:"United States"}
+    };
+    const countryPreferenceKey = "agentproof-country";
     const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character => ({
       "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;"
     }[character]));
     let activeOrderId = null;
     let expiryTimer = null;
+    let selectedCountry = "IN";
+    let countryPreferenceSaved = false;
+    let activeMandateCurrency = null;
+    let budgetInputCurrency = "INR";
+
+    function selectedCurrency() {
+      return countryOptions[selectedCountry].currency;
+    }
+
+    function countryForCurrency(currency) {
+      return Object.keys(countryOptions).find(
+        country => countryOptions[country].currency === currency
+      );
+    }
+
+    function formatAmount(amount, currency = selectedCurrency()) {
+      const numeric = Number(amount);
+      const country = Object.values(countryOptions).find(
+        option => option.currency === currency
+      );
+      if (!Number.isFinite(numeric) || !country) return "Amount unavailable";
+      return new Intl.NumberFormat(country.locale, {
+        style:"currency",
+        currency
+      }).format(numeric);
+    }
+
+    function updateCurrencyUI() {
+      const currency = selectedCurrency();
+      const symbol = currency === "INR" ? "₹" : "$";
+      $("countrySelector").value = selectedCountry;
+      $("budgetLabel").textContent = `Maximum total (${currency} ${symbol})`;
+      if (budgetInputCurrency !== currency) {
+        $("budget").value = "";
+        budgetInputCurrency = currency;
+      }
+      $("currencyNotice").textContent = activeMandateCurrency && activeMandateCurrency !== currency
+        ? `The active signed mandate is in ${activeMandateCurrency}. Create a new signed mandate in ${currency} before purchases can proceed. No currency conversion is applied.`
+        : "Amounts use the selected currency directly. No currency conversion is applied.";
+    }
+
+    function initializeCountryPreference() {
+      try {
+        const savedCountry = localStorage.getItem(countryPreferenceKey);
+        if (Object.hasOwn(countryOptions, savedCountry)) {
+          selectedCountry = savedCountry;
+          countryPreferenceSaved = true;
+          $("countryPreferenceStatus").textContent = "Saved preference loaded.";
+        }
+      } catch {
+        $("countryPreferenceStatus").textContent = "Could not read the saved country preference.";
+      }
+      updateCurrencyUI();
+    }
+
+    $("countrySelector").addEventListener("change", event => {
+      if (!Object.hasOwn(countryOptions, event.target.value)) return;
+      selectedCountry = event.target.value;
+      countryPreferenceSaved = true;
+      updateCurrencyUI();
+      try {
+        localStorage.setItem(countryPreferenceKey, selectedCountry);
+        $("countryPreferenceStatus").textContent = "Country preference saved on this device.";
+      } catch {
+        $("countryPreferenceStatus").textContent = "Country changed, but the preference could not be saved.";
+      }
+    });
 
     class RequestError extends Error {}
 
@@ -365,15 +480,23 @@
       const summary = $("mandateSummary");
       const mandate = saved?.mandate;
       if (!mandate) {
+        activeMandateCurrency = null;
         status.className = "status neutral";
         status.textContent = "No signed mandate yet. Create one to authorize purchases.";
         summary.hidden = true;
+        updateCurrencyUI();
         clearInterval(expiryTimer);
         return;
       }
+      activeMandateCurrency = mandate.currency || "USD";
+      if (!countryPreferenceSaved) {
+        selectedCountry = countryForCurrency(activeMandateCurrency) || "IN";
+      }
       $("budget").value = mandate.max_total;
+      budgetInputCurrency = activeMandateCurrency;
       $("categories").value = Array.isArray(mandate.allowed_categories) ? mandate.allowed_categories.join(", ") : "";
       $("merchants").value = Array.isArray(mandate.allowed_merchants) ? mandate.allowed_merchants.join(", ") : "";
+      updateCurrencyUI();
       const expiresAt = expiryDateValue(mandate.expires_at);
       if (expiresAt) $("expiry").value = localDateTimeValue(expiresAt);
       status.className = "status good";
@@ -382,7 +505,7 @@
       const heading = document.createElement("strong");
       heading.textContent = "Signed mandate";
       const budget = document.createElement("p");
-      budget.textContent = `Budget: ${formatAmount(mandate.max_total)}`;
+      budget.textContent = `Budget: ${formatAmount(mandate.max_total, activeMandateCurrency)} (${activeMandateCurrency})`;
       const expiry = document.createElement("p");
       expiry.textContent = `Expires: ${expiresAt ? expiresAt.toLocaleString() : "date unavailable"}`;
       const timer = document.createElement("p");
@@ -402,13 +525,6 @@
       }
     }
 
-    function formatAmount(amount) {
-      const numeric = Number(amount);
-      return Number.isFinite(numeric)
-        ? new Intl.NumberFormat(undefined, {style:"currency", currency:"USD"}).format(numeric)
-        : "Amount unavailable";
-    }
-
     $("mandateForm").addEventListener("submit", async event => {
       event.preventDefault();
       const button = $("createMandate");
@@ -421,6 +537,7 @@
           headers:{"Content-Type":"application/json"},
           body:JSON.stringify({
             budget:Number($("budget").value),
+            currency:selectedCurrency(),
             allowed_categories:commaList($("categories").value),
             allowed_merchants:commaList($("merchants").value),
             expires_at:new Date($("expiry").value).toISOString()
@@ -459,7 +576,7 @@
       result.append(reason);
       if (decision === "ALLOW") {
         const details = document.createElement("p");
-        details.textContent = `Amount: ${formatAmount(purchase?.amount)} · Category: ${purchase?.category || "not recorded"}`;
+        details.textContent = `Amount: ${formatAmount(purchase?.amount, purchase?.currency)} (${purchase?.currency || "currency not recorded"}) · Category: ${purchase?.category || "not recorded"}`;
         result.append(details);
       }
       if (data.reasoning) {
@@ -512,7 +629,11 @@
         const data = await api("/agent/run", {
           method:"POST",
           headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({request:$("request").value, rogue})
+          body:JSON.stringify({
+            request:$("request").value,
+            rogue,
+            currency:selectedCurrency()
+          })
         });
         const events = await fetchEvents();
         const policyEvent = events.find(item =>
@@ -540,7 +661,7 @@
       $("captureStatus").textContent = "Requesting payment capture from PayPal Sandbox…";
       try {
         const result = await api(`/paypal/capture/${encodeURIComponent(activeOrderId)}`, {method:"POST"});
-        $("captureStatus").textContent = `Order status: ${result.status}. Capture ID: ${result.capture_id}.`;
+        $("captureStatus").textContent = `Order status: ${result.status}. Captured ${formatAmount(result.amount, result.currency)} (${result.currency}). Capture ID: ${result.capture_id}.`;
         await refreshLog();
       } catch (error) {
         $("captureStatus").textContent = error instanceof RequestError
@@ -570,15 +691,25 @@
       return readableEventNames[event.event_type] || String(event.event_type || "Audit event").replaceAll("_", " ");
     }
 
-    function readableAuditData(value, prefix = "") {
+    function readableAuditData(value, prefix = "", currency = null) {
       if (value === null || value === undefined) return prefix ? [`${prefix}: not recorded`] : [];
       if (Array.isArray(value)) {
         return [`${prefix}: ${value.map(item => typeof item === "object" ? "[details]" : String(item)).join(", ")}`];
       }
       if (typeof value === "object") {
+        const objectCurrency = ["INR", "USD"].includes(value.currency)
+          ? value.currency
+          : currency;
         return Object.entries(value).flatMap(([key, item]) =>
-          readableAuditData(item, prefix ? `${prefix} · ${key}` : key)
+          readableAuditData(item, prefix ? `${prefix} · ${key}` : key, objectCurrency)
         );
+      }
+      const field = prefix.split(" · ").at(-1);
+      if (["amount", "max_total", "budget"].includes(field) && ["INR", "USD"].includes(currency)) {
+        const numeric = Number(value);
+        if (Number.isFinite(numeric)) {
+          return [`${prefix}: ${formatAmount(numeric, currency)} (${currency})`];
+        }
       }
       return [`${prefix}: ${String(value)}`];
     }
@@ -614,7 +745,12 @@
         meta.append(titleGroup, hash);
         row.append(meta);
 
-        const detailLines = readableAuditData(event.data);
+        const eventCurrency = event.data?.currency
+          || event.data?.purchase?.currency
+          || event.data?.mandate?.currency
+          || (event.event_type === "policy_decision" && event.data?.purchase?.amount !== undefined ? "USD" : null)
+          || (event.data?.mandate ? "USD" : null);
+        const detailLines = readableAuditData(event.data, "", eventCurrency);
         if (detailLines.length) {
           const details = document.createElement("details");
           details.className = "event-details";
@@ -713,11 +849,20 @@
       setBusy([button], true, "Building…");
       try {
         const data = await api(`/dispute/${encodeURIComponent(purchaseId)}`);
+        const authorizedAmount = data.amount !== null && data.amount !== undefined && data.currency
+          ? `${formatAmount(data.amount, data.currency)} (${data.currency})`
+          : "Not recorded";
+        const capturedAmount = data.captured_amount !== null && data.captured_amount !== undefined && data.captured_currency
+          ? `${formatAmount(data.captured_amount, data.captured_currency)} (${data.captured_currency})`
+          : "Not recorded";
         const rows = [
           ["Original request", data.request],
           ["Agent reasoning", data.reasoning],
-          ["Mandate terms", data.mandate ? readableAuditData(data.mandate).join("\n") : "Not recorded"],
+          ["Mandate terms", data.mandate ? readableAuditData(data.mandate, "", data.mandate.currency || "USD").join("\n") : "Not recorded"],
           ["Policy decision", `${data.decision || "Not recorded"}${data.decision_reason ? ` — ${data.decision_reason}` : ""}`],
+          ["Authorized amount", authorizedAmount],
+          ["Transaction currency", data.currency],
+          ["Captured amount", capturedAmount],
           ["PayPal order ID", data.paypal_order_id],
           ["PayPal capture ID", data.capture_id],
           ["Audit chain", data.chain_intact ? "Chain intact" : "Chain BROKEN"]
@@ -747,6 +892,7 @@
       }
     }
 
+    initializeCountryPreference();
     setDefaultExpiry();
     loadMandate();
     refreshLog();

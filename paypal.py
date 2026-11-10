@@ -1,8 +1,11 @@
 """PayPal Sandbox OAuth and Orders API helpers."""
 
 import os
+from decimal import Decimal, InvalidOperation
 
 import requests
+
+import currency as currency_utils
 
 SANDBOX_API = "https://api-m.sandbox.paypal.com"
 REQUEST_TIMEOUT = 15
@@ -47,6 +50,7 @@ def get_access_token():
 
 
 def create_order(access_token, amount, currency="USD", description=""):
+    currency_utils.validate_currency(currency)
     response = requests.post(
         f"{SANDBOX_API}/v2/checkout/orders",
         headers={
@@ -79,7 +83,14 @@ def create_order(access_token, amount, currency="USD", description=""):
     return {"order_id": order_id, "approval_link": approval_link}
 
 
-def capture_order(access_token, order_id):
+def capture_order(
+    access_token,
+    order_id,
+    expected_currency=None,
+    expected_amount=None,
+):
+    if expected_currency is not None:
+        currency_utils.validate_currency(expected_currency)
     response = requests.post(
         f"{SANDBOX_API}/v2/checkout/orders/{order_id}/capture",
         headers={
@@ -96,7 +107,31 @@ def capture_order(access_token, order_id):
         for capture in unit.get("payments", {}).get("captures", [])
     ]
     capture_id = captures[0].get("id") if captures else None
+    amount = captures[0].get("amount") if captures else None
+    captured_currency = (
+        amount.get("currency_code") if isinstance(amount, dict) else None
+    )
+    value = amount.get("value") if isinstance(amount, dict) else None
     status = payload.get("status")
     if not status or not capture_id:
         raise PayPalError("PayPal capture response is missing its status or capture id.")
-    return {"status": status, "capture_id": capture_id}
+    if expected_currency is not None and captured_currency != expected_currency:
+        raise PayPalError("PayPal capture currency does not match the signed mandate.")
+    if expected_amount is not None:
+        try:
+            captured_amount = Decimal(str(value))
+            authorized_amount = Decimal(str(expected_amount))
+        except (InvalidOperation, ValueError):
+            raise PayPalError("PayPal capture amount is missing or invalid.") from None
+        if (
+            not captured_amount.is_finite()
+            or not authorized_amount.is_finite()
+            or captured_amount != authorized_amount
+        ):
+            raise PayPalError("PayPal capture amount does not match the authorized order.")
+    return {
+        "status": status,
+        "capture_id": capture_id,
+        "amount": value,
+        "currency": captured_currency,
+    }

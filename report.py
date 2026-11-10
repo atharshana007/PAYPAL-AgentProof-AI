@@ -27,9 +27,19 @@ def _template_summary(report):
         if report["capture_id"]
         else "No PayPal capture was recorded."
     )
+    amount_text = (
+        f"The authorized amount was {report['amount']} {report['currency']}."
+        if report["amount"] is not None and report["currency"]
+        else "No transaction amount or currency was recorded."
+    )
+    captured_amount_text = (
+        f"The captured amount was {report['captured_amount']} {report['captured_currency']}."
+        if report["captured_amount"] is not None and report["captured_currency"]
+        else ""
+    )
     return (
         f"The request was: {request}. The policy decision was {decision}: {reason}. "
-        f"{order_text} {capture_text}"
+        f"{amount_text} {order_text} {capture_text} {captured_amount_text}"
     )
 
 
@@ -48,6 +58,10 @@ def _summary(report):
             "decision_reason",
             "paypal_order_id",
             "capture_id",
+            "amount",
+            "currency",
+            "captured_amount",
+            "captured_currency",
             "chain_intact",
         )
     }
@@ -80,6 +94,10 @@ def build_report(purchase_id):
         "decision_reason": None,
         "paypal_order_id": None,
         "capture_id": None,
+        "amount": None,
+        "currency": None,
+        "captured_amount": None,
+        "captured_currency": None,
         "chain_intact": auditlog.verify_chain()[0],
         "events": events,
     }
@@ -97,12 +115,23 @@ def build_report(purchase_id):
         elif event_type == "policy_decision":
             report["decision"] = data.get("decision")
             report["decision_reason"] = data.get("reason")
+            purchase = data.get("purchase") or {}
+            report["amount"] = purchase.get("amount")
+            report["currency"] = (
+                purchase.get("currency")
+                or data.get("currency")
+                or ("USD" if purchase.get("amount") is not None else None)
+            )
         elif event_type == "paypal_order_created":
             report["paypal_order_id"] = data.get("order_id")
+            report["amount"] = data.get("amount", report["amount"])
+            report["currency"] = data.get("currency") or report["currency"]
             if data.get("order_id"):
                 order_ids.add(data["order_id"])
         elif event_type == "paypal_captured":
             report["capture_id"] = data.get("capture_id")
+            report["captured_amount"] = data.get("amount")
+            report["captured_currency"] = data.get("currency")
 
     if order_ids and not report["capture_id"]:
         for event in auditlog.get_log():

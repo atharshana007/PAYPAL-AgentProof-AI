@@ -60,6 +60,7 @@ def test_create_order_returns_id_and_approval_link(monkeypatch):
         "currency_code": "USD",
         "value": "12.5",
     }
+    assert seen["headers"]["Authorization"] == "Bearer sandbox-token"
     assert seen["timeout"] == 15
 
 
@@ -72,7 +73,16 @@ def test_capture_order_returns_status_and_capture_id(monkeypatch):
             {
                 "status": "COMPLETED",
                 "purchase_units": [
-                    {"payments": {"captures": [{"id": "CAPTURE-123"}]}}
+                    {
+                        "payments": {
+                            "captures": [
+                                {
+                                    "id": "CAPTURE-123",
+                                    "amount": {"currency_code": "USD", "value": "12.5"},
+                                }
+                            ]
+                        }
+                    }
                 ],
             }
         )
@@ -81,11 +91,87 @@ def test_capture_order_returns_status_and_capture_id(monkeypatch):
 
     capture = paypal.capture_order("sandbox-token", "ORDER-123")
 
-    assert capture == {"status": "COMPLETED", "capture_id": "CAPTURE-123"}
+    assert capture == {
+        "status": "COMPLETED",
+        "capture_id": "CAPTURE-123",
+        "amount": "12.5",
+        "currency": "USD",
+    }
     assert seen["url"] == (
         f"{paypal.SANDBOX_API}/v2/checkout/orders/ORDER-123/capture"
     )
     assert seen["timeout"] == 15
+
+
+def test_create_order_rejects_unsupported_currency(monkeypatch):
+    with pytest.raises(ValueError, match="INR or USD"):
+        paypal.create_order("sandbox-token", 12.5, currency="EUR")
+
+
+def test_capture_order_validates_captured_currency_and_amount(monkeypatch):
+    seen = {}
+
+    def post(url, **kwargs):
+        seen.update(url=url, **kwargs)
+        return MockResponse(
+            {
+                "status": "COMPLETED",
+                "purchase_units": [
+                    {
+                        "payments": {
+                            "captures": [
+                                {
+                                    "id": "CAPTURE-123",
+                                    "amount": {"currency_code": "INR", "value": "1250.00"},
+                                }
+                            ]
+                        }
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(paypal.requests, "post", post)
+
+    capture = paypal.capture_order(
+        "sandbox-token",
+        "ORDER-123",
+        expected_currency="INR",
+        expected_amount="1250",
+    )
+
+    assert capture == {
+        "status": "COMPLETED",
+        "capture_id": "CAPTURE-123",
+        "amount": "1250.00",
+        "currency": "INR",
+    }
+    assert seen["headers"]["Authorization"] == "Bearer sandbox-token"
+
+
+def test_capture_order_rejects_mismatched_captured_currency(monkeypatch):
+    def post(url, **kwargs):
+        return MockResponse(
+            {
+                "status": "COMPLETED",
+                "purchase_units": [
+                    {
+                        "payments": {
+                            "captures": [
+                                {
+                                    "id": "CAPTURE-123",
+                                    "amount": {"currency_code": "USD", "value": "12.50"},
+                                }
+                            ]
+                        }
+                    }
+                ],
+            }
+        )
+
+    monkeypatch.setattr(paypal.requests, "post", post)
+    with pytest.raises(paypal.PayPalError, match="currency"):
+        paypal.capture_order("sandbox-token", "ORDER-123", expected_currency="INR")
 
 
 def test_missing_credentials_raise_clear_error(monkeypatch):

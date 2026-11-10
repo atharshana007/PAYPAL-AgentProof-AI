@@ -21,7 +21,12 @@ def signed_mandate(monkeypatch):
 
 
 def request(amount=50, category="books", merchant="Demo Store"):
-    return {"amount": amount, "category": category, "merchant": merchant}
+    return {
+        "amount": amount,
+        "category": category,
+        "merchant": merchant,
+        "currency": "INR",
+    }
 
 
 def test_allowed_purchase(signed_mandate):
@@ -79,3 +84,21 @@ def test_purchase_over_80_percent_needs_approval(signed_mandate):
     decision, reason = policy.check_policy(data, signature, request(amount=81))
     assert decision == "NEEDS_APPROVAL"
     assert "80%" in reason
+
+
+def test_purchase_currency_must_match_signed_mandate(signed_mandate):
+    data, signature = signed_mandate
+    decision, reason = policy.check_policy(
+        data, signature, {**request(), "currency": "USD"}
+    )
+    assert decision == "BLOCK"
+    assert "currency" in reason
+
+
+def test_purchase_currency_must_be_supported(signed_mandate):
+    data, signature = signed_mandate
+    decision, reason = policy.check_policy(
+        data, signature, {**request(), "currency": "EUR"}
+    )
+    assert decision == "BLOCK"
+    assert "currency" in reason

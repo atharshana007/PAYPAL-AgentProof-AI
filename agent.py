@@ -1,13 +1,14 @@
 import os
 from collections.abc import Mapping
-from uuid import uuid4
 from typing import Any
+from uuid import uuid4
 
 from anthropic import Anthropic
 from anthropic.types import ToolParam
 from dotenv import load_dotenv
 
 import auditlog
+import currency as currency_utils
 import mandate
 import paypal
 import policy
@@ -25,9 +26,10 @@ PURCHASE_TOOL: ToolParam = {
             "item": {"type": "string", "description": "Item to purchase"},
             "merchant": {"type": "string", "description": "Merchant selling the item"},
             "category": {"type": "string", "description": "Purchase category"},
-            "amount": {"type": "number", "description": "Total price in USD"},
+            "amount": {"type": "number", "description": "Total price in the signed mandate currency"},
+            "currency": {"type": "string", "enum": ["INR", "USD"], "description": "Currency code; must match the signed mandate"},
         },
-        "required": ["item", "merchant", "category", "amount"],
+        "required": ["item", "merchant", "category", "amount", "currency"],
         "additionalProperties": False,
     },
 }
@@ -40,9 +42,10 @@ GEMINI_PURCHASE_DECLARATION = {
             "item": {"type": "STRING", "description": "Item to purchase"},
             "merchant": {"type": "STRING", "description": "Merchant selling the item"},
             "category": {"type": "STRING", "description": "Purchase category"},
-            "amount": {"type": "NUMBER", "description": "Total price in USD"},
+            "amount": {"type": "NUMBER", "description": "Total price in the signed mandate currency"},
+            "currency": {"type": "STRING", "enum": ["INR", "USD"], "description": "Currency code; must match the signed mandate"},
         },
-        "required": ["item", "merchant", "category", "amount"],
+        "required": ["item", "merchant", "category", "amount", "currency"],
     },
 }
 
@@ -61,10 +64,17 @@ def _provider():
 
 
 def _system_prompt(current, rogue):
+    denomination = (
+        currency_utils.mandate_currency(current["mandate"])
+        if current
+        else currency_utils.DEFAULT_CURRENCY
+    )
     prompt = (
         "You are a shopping agent acting for the user. Request a purchase using "
         "the purchase function; do not claim a purchase happened without "
-        "requesting it. The application will check every request against the mandate."
+        "requesting it. The application will check every request against the mandate. "
+        f"Express the amount directly in {denomination}, set the currency field to "
+        f"{denomination}, and do not convert from another currency."
     )
     if rogue:
         budget = (
@@ -169,6 +179,11 @@ def _generate_gemini(request, system_prompt) -> tuple[str, dict[str, Any] | None
 
 def _generate_mock(request, current, rogue) -> tuple[str, dict[str, Any]]:
     mandate_data = current["mandate"] if current else {}
+    purchase_currency = (
+        mandate_data.get("currency", currency_utils.LEGACY_CURRENCY)
+        if current
+        else currency_utils.DEFAULT_CURRENCY
+    )
     budget = mandate_data.get("max_total", 50)
     try:
         budget = float(budget)
@@ -182,6 +197,7 @@ def _generate_mock(request, current, rogue) -> tuple[str, dict[str, Any]]:
             "merchant": merchants[0],
             "category": "__unauthorized_category__",
             "amount": budget + max(1, abs(budget)),
+            "currency": purchase_currency,
         }
         reasoning = "The scripted mock agent is attempting an unauthorized purchase."
     else:
@@ -190,6 +206,7 @@ def _generate_mock(request, current, rogue) -> tuple[str, dict[str, Any]]:
             "merchant": merchants[0],
             "category": categories[0],
             "amount": min(max(budget * 0.5, 0.01), 25),
+            "currency": purchase_currency,
         }
         reasoning = "The scripted mock agent generated a purchase proposal."
     return reasoning, purchase
@@ -244,13 +261,59 @@ def _error_result(purchase_id, provider, message, reasoning=None):
     }
 
 
-def run_agent(request: str, rogue: bool = False) -> dict:
+def run_agent(request: str, rogue: bool = False, currency: str | None = None) -> dict:
+    requested_currency = currency_utils.validate_currency(
+        currency or currency_utils.DEFAULT_CURRENCY
+    )
     purchase_id = str(uuid4())
     auditlog.append_event(
         purchase_id,
         "agent_request",
-        {"request": request, "rogue": rogue},
+        {"request": request, "rogue": rogue, "currency": requested_currency},
     )
+    current = mandate.get_current()
+    try:
+        mandate_currency = (
+            currency_utils.mandate_currency(current["mandate"]) if current else None
+        )
+    except (AttributeError, ValueError):
+        mandate_currency = None
+        reason = "The signed mandate currency is invalid."
+        auditlog.append_event(
+            purchase_id,
+            "policy_decision",
+            {
+                "decision": "BLOCK",
+                "reason": reason,
+                "currency": requested_currency,
+            },
+        )
+        return {
+            "purchase_id": purchase_id,
+            "decision": "BLOCK",
+            "reason": reason,
+            "provider": _provider()[0],
+            "currency": requested_currency,
+        }
+    if mandate_currency and requested_currency != mandate_currency:
+        reason = "The selected currency does not match the signed mandate. Create a new mandate in the selected currency."
+        auditlog.append_event(
+            purchase_id,
+            "policy_decision",
+            {
+                "decision": "BLOCK",
+                "reason": reason,
+                "currency": requested_currency,
+                "mandate_currency": mandate_currency,
+            },
+        )
+        return {
+            "purchase_id": purchase_id,
+            "decision": "BLOCK",
+            "reason": reason,
+            "provider": _provider()[0],
+            "currency": requested_currency,
+        }
     provider, config_error = _provider()
     if config_error:
         return _error_result(purchase_id, provider, config_error)
@@ -268,12 +331,15 @@ def run_agent(request: str, rogue: bool = False) -> dict:
             "ANTHROPIC_API_KEY is not configured; the agent could not run.",
         )
 
-    current = mandate.get_current()
     if current:
         auditlog.append_event(
             purchase_id,
             "mandate_used",
-            {"mandate": current["mandate"]},
+            {
+                "mandate": current["mandate"],
+                "signature": current["signature"],
+                "currency": mandate_currency,
+            },
         )
     system_prompt = _system_prompt(current, rogue)
 
@@ -317,6 +383,7 @@ def run_agent(request: str, rogue: bool = False) -> dict:
             "purchase": purchase_request,
             "decision": decision,
             "reason": reason,
+            "currency": mandate_currency or requested_currency,
         },
     )
     result = {
@@ -325,6 +392,7 @@ def run_agent(request: str, rogue: bool = False) -> dict:
         "reason": reason,
         "reasoning": reasoning,
         "provider": provider,
+        "currency": mandate_currency or requested_currency,
     }
     if decision == "ALLOW":
         description = purchase_request.get("item")
@@ -339,11 +407,14 @@ def run_agent(request: str, rogue: bool = False) -> dict:
             order = paypal.create_order(
                 access_token,
                 purchase_request["amount"],
+                currency=mandate_currency,
                 description=description,
             )
         except paypal.PayPalError as exc:
             auditlog.append_event(
-                purchase_id, "paypal_order_failed", {"reason": str(exc)}
+                purchase_id,
+                "paypal_order_failed",
+                {"reason": str(exc), "currency": mandate_currency},
             )
             result.update({"decision": "ERROR", "reason": str(exc)})
             return result
@@ -353,6 +424,8 @@ def run_agent(request: str, rogue: bool = False) -> dict:
             {
                 "order_id": order["order_id"],
                 "approval_link": order["approval_link"],
+                "amount": str(purchase_request["amount"]),
+                "currency": mandate_currency,
             },
         )
         result.update(

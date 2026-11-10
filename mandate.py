@@ -6,15 +6,25 @@ import os
 from dotenv import load_dotenv
 
 import auditlog
+import currency as currency_utils
 
 load_dotenv()
 
 
-def create_mandate(user, max_total, allowed_categories, allowed_merchants, expires_at):
+def create_mandate(
+    user,
+    max_total,
+    allowed_categories,
+    allowed_merchants,
+    expires_at,
+    currency=currency_utils.DEFAULT_CURRENCY,
+):
     """Create a JSON-ready mandate payload."""
+    currency_utils.validate_currency(currency)
     return {
         "user": user,
         "max_total": max_total,
+        "currency": currency,
         "allowed_categories": list(allowed_categories),
         "allowed_merchants": list(allowed_merchants),
         "expires_at": expires_at,
@@ -49,6 +59,7 @@ def create_and_store(data):
         allowed_categories=data["allowed_categories"],
         allowed_merchants=data["allowed_merchants"],
         expires_at=data["expires_at"],
+        currency=data.get("currency", currency_utils.DEFAULT_CURRENCY),
     )
     signature = sign_mandate(mandate_data)
     canonical = json.dumps(mandate_data, sort_keys=True)
@@ -59,7 +70,13 @@ def create_and_store(data):
             (canonical, signature),
         )
     auditlog.append_event(
-        "", "mandate_created", {"mandate": mandate_data, "signature": signature}
+        "",
+        "mandate_created",
+        {
+            "mandate": mandate_data,
+            "signature": signature,
+            "currency": mandate_data["currency"],
+        },
     )
     return {"mandate": mandate_data, "signature": signature}
 

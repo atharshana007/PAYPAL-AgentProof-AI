@@ -8,6 +8,7 @@ Agents will soon spend money for us, but nobody can prove who authorized what. A
 2. **Policy gate:** The shopping agent proposes a purchase; the policy gate verifies the mandate signature and checks the purchase before any order is created.
 3. **Hash-chained log:** Requests, mandate terms, reasoning, policy decisions, and payment events are recorded in SQLite and linked by hashes so edits can be detected.
 4. **Dispute report:** A report gathers the recorded facts for a purchase, reports the chain status, and provides a plain-English summary.
+5. **Currency:** Select India (INR) or United States (USD) in the top navigation. India is the default, and the selection is saved on this device. Each mandate is signed in its selected currency; changing country requires creating a new mandate before a purchase can proceed. Amounts are entered directly in that currency; the app does not convert prices.
 
 ```text
  User
@@ -65,19 +66,15 @@ Start the app:
 .\run.ps1
 ```
 
-<<<<<<< HEAD
 Open <http://127.0.0.1:8765>. Verify the app at
 <http://127.0.0.1:8765/health>. Interactive API documentation is available at
-=======
-Open<http://127.0.0.1:8765>Interactive API documentation is available at
->>>>>>> 0a050a6b17ee52b284351a60225c657ad120f86e
 <http://127.0.0.1:8765/docs>. By default, SQLite is stored in `agentproof.db`;
 set `DB_PATH` in `.env` to select another database file.
 
 ## Five-step demo walkthrough
 
 1. **Create the mandate:** Run `python seed_demo.py`, confirm the reset, and
-   check the signed $50 accessories mandate in the Mandate panel.
+   check the signed ₹50 INR accessories mandate in the Mandate panel.
 2. **Try the policy gate:** Run the agent with an allowed accessories purchase;
    use Rogue Agent to request an over-budget purchase from a disallowed category.
    The policy gate blocks unauthorized requests before any payment order is made.

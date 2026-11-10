@@ -14,6 +14,7 @@ def _add_purchase_events(purchase_id, decision="ALLOW"):
     mandate_terms = {
         "user": "demo-user",
         "max_total": 100,
+        "currency": "INR",
         "allowed_categories": ["books"],
         "allowed_merchants": ["Demo Store"],
         "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
@@ -32,18 +33,37 @@ def _add_purchase_events(purchase_id, decision="ALLOW"):
     auditlog.append_event(
         purchase_id,
         "policy_decision",
-        {"decision": decision, "reason": "Matches mandate." if decision == "ALLOW" else "Category not allowed."},
+        {
+            "purchase": {
+                "amount": 50,
+                "currency": "INR",
+                "item": "Book",
+            },
+            "decision": decision,
+            "reason": "Matches mandate." if decision == "ALLOW" else "Category not allowed.",
+            "currency": "INR",
+        },
     )
     if decision == "ALLOW":
         auditlog.append_event(
             purchase_id,
             "paypal_order_created",
-            {"order_id": "ORDER-123", "approval_link": "https://sandbox/approve"},
+            {
+                "order_id": "ORDER-123",
+                "approval_link": "https://sandbox/approve",
+                "amount": "50",
+                "currency": "INR",
+            },
         )
         auditlog.append_event(
             purchase_id,
             "paypal_captured",
-            {"capture_id": "CAPTURE-123", "status": "COMPLETED"},
+            {
+                "capture_id": "CAPTURE-123",
+                "status": "COMPLETED",
+                "amount": "50.00",
+                "currency": "INR",
+            },
         )
 
 
@@ -59,6 +79,10 @@ def test_build_report_for_normal_purchase(monkeypatch, tmp_path):
     assert result["decision"] == "ALLOW"
     assert result["paypal_order_id"] == "ORDER-123"
     assert result["capture_id"] == "CAPTURE-123"
+    assert result["amount"] == "50"
+    assert result["currency"] == "INR"
+    assert result["captured_amount"] == "50.00"
+    assert result["captured_currency"] == "INR"
     assert result["chain_intact"] is True
     assert "Matches mandate." in result["summary"]
 

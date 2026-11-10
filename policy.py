@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import math
 
+import currency as currency_utils
 import mandate as mandate_signing
 
 
@@ -17,6 +18,14 @@ def check_policy(mandate, signature, request):
     """Return the policy decision and an explanation for a purchase request."""
     if not mandate_signing.verify_mandate(mandate, signature):
         return "BLOCK", "The mandate signature is invalid."
+
+    try:
+        mandate_currency = currency_utils.mandate_currency(mandate)
+        purchase_currency = currency_utils.validate_currency(request.get("currency"))
+    except (AttributeError, ValueError):
+        return "BLOCK", "The purchase or mandate currency is invalid."
+    if purchase_currency != mandate_currency:
+        return "BLOCK", "The purchase currency does not match the signed mandate."
 
     try:
         expiry = datetime.fromisoformat(mandate["expires_at"])

@@ -21,6 +21,7 @@ def main():
     demo_mandate = {
         "user": "Demo User",
         "max_total": 50,
+        "currency": "INR",
         "allowed_categories": ["accessories"],
         "allowed_merchants": ["Demo Accessories Shop"],
         "expires_at": expires_at,
