@@ -458,7 +458,7 @@ def test_provider_defaults_to_mock_without_provider_keys(monkeypatch, signed_man
         },
     )
 
-    result = agent.run_agent("Buy a book")
+    result = agent.run_agent("usb cable")
 
     assert result["provider"] == "mock"
     assert result["decision"] == "ALLOW"
@@ -472,6 +472,8 @@ def test_provider_defaults_to_mock_without_provider_keys(monkeypatch, signed_man
     reasoning = next(
         event for event in result_events if event["event_type"] == "agent_reasoning"
     )
+    assert "Braided USB-C Cable" in reasoning["data"]["text"]
+    assert "cable, usb" in reasoning["data"]["text"]
     decision = next(
         event for event in result_events if event["event_type"] == "policy_decision"
     )
@@ -479,6 +481,31 @@ def test_provider_defaults_to_mock_without_provider_keys(monkeypatch, signed_man
         assert event["data"]["product_name"] == "Braided USB-C Cable"
         assert event["data"]["product_image"] == "/static/images/usb-c-cable.svg"
         assert event["data"]["price"] == 49
+
+
+@pytest.mark.parametrize(
+    ("request_text", "rogue", "expected_product", "reason_fragment"),
+    [
+        ("mobile case", False, "Mobile Phone Case", "case, mobile"),
+        ("phone cover", False, "Mobile Phone Case", "case, mobile"),
+        ("usb cable", False, "Braided USB-C Cable", "cable, usb"),
+        ("unknown request", False, "Braided USB-C Cable", "No exact match"),
+        (
+            "mobile case",
+            True,
+            "27-inch Smart Monitor",
+            "most expensive electronics item",
+        ),
+    ],
+)
+def test_mock_selects_matching_product_and_explains_selection(
+    request_text, rogue, expected_product, reason_fragment
+):
+    reasoning, purchase = agent._generate_mock(request_text, None, rogue=rogue)
+
+    assert purchase["item"] == expected_product
+    assert expected_product in reasoning
+    assert reason_fragment in reasoning
 
 
 def test_mock_proposal_uses_india_currency_without_a_mandate():

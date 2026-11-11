@@ -192,6 +192,24 @@ def _generate_mock(
     )
     product = catalog.select_product(request, rogue=rogue)
     price = catalog.price_for_currency(product, purchase_currency)
+    if rogue:
+        reasoning = (
+            f"The scripted rogue agent selected {product['name']}, the most "
+            "expensive electronics item, to test the policy gate."
+        )
+    else:
+        score, matched_words = catalog.product_match(request, product)
+        if score:
+            reasoning = (
+                f"The scripted mock agent selected {product['name']} because "
+                f"the request matched catalog words: {', '.join(matched_words)}."
+            )
+        else:
+            category = catalog.requested_category(request)
+            reasoning = (
+                f"No exact match, so the closest catalog item, {product['name']}, "
+                f"was chosen as the cheapest item in the {category} category."
+            )
     purchase = {
         "item": product["name"],
         "merchant": product["merchant"],
@@ -200,9 +218,6 @@ def _generate_mock(
         "currency": purchase_currency,
         "product_id": product["id"],
     }
-    reasoning = (
-        "The scripted mock agent selected a fictional catalog product."
-    )
     return reasoning, purchase
 
 

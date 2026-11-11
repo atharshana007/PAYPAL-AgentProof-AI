@@ -1,16 +1,34 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 import catalog
 import mandate
 import seed_demo
 
 
-def test_catalog_contains_six_fictional_demo_products():
-    assert len(catalog.PRODUCTS) == 6
+def test_catalog_contains_seven_fictional_demo_products():
+    assert len(catalog.PRODUCTS) == 7
     assert all(
-        {"id", "name", "merchant", "category", "price_usd", "image"} <= product.keys()
+        {
+            "id",
+            "name",
+            "keywords",
+            "is_demo",
+            "merchant",
+            "category",
+            "price_usd",
+            "image",
+        }
+        <= product.keys()
         for product in catalog.PRODUCTS
+    )
+    assert all(product["is_demo"] for product in catalog.PRODUCTS)
+    assert all(
+        keyword == keyword.lower()
+        for product in catalog.PRODUCTS
+        for keyword in product["keywords"]
     )
     assert {product["merchant"] for product in catalog.PRODUCTS} == {
         "Flipkart",
@@ -24,12 +42,57 @@ def test_catalog_contains_six_fictional_demo_products():
         product["category"] == "electronics" and product["price_usd"] > 50
         for product in catalog.PRODUCTS
     )
+    mobile_case = next(
+        product for product in catalog.PRODUCTS if product["id"] == "mobile-phone-case"
+    )
+    assert mobile_case["name"] == "Mobile Phone Case"
+    assert mobile_case["merchant"] == "Demo Accessories Shop"
+    assert mobile_case["category"] == "accessories"
+    assert mobile_case["price_usd"] == 12.99
+    assert mobile_case["keywords"] == ["mobile", "phone", "case", "cover"]
 
 
-def test_normal_mock_selects_cheapest_matching_category():
+def test_normal_mock_selects_request_match_or_cheapest_category_fallback():
     assert catalog.select_product("Buy accessories")["id"] == "usb-c-cable"
-    assert catalog.select_product("Buy a phone")["id"] == "bluetooth-speaker"
-    assert catalog.select_product("Find something")["category"] == "accessories"
+    assert catalog.select_product("Buy a phone")["id"] == "mobile-phone-case"
+    assert catalog.select_product("Find something")["id"] == "usb-c-cable"
+
+
+@pytest.mark.parametrize(
+    ("request_text", "expected_id"),
+    [
+        ("mobile case", "mobile-phone-case"),
+        ("phone cover", "mobile-phone-case"),
+        ("usb cable", "usb-c-cable"),
+    ],
+)
+def test_mock_selects_product_by_request_words(request_text, expected_id):
+    assert catalog.select_product(request_text)["id"] == expected_id
+
+
+def test_mock_uses_cheapest_item_when_matching_scores_tie(monkeypatch):
+    monkeypatch.setattr(
+        catalog,
+        "PRODUCTS",
+        (
+            {
+                "id": "more-expensive",
+                "name": "Demo Cable",
+                "keywords": ["cable"],
+                "price_usd": 12,
+                "category": "accessories",
+            },
+            {
+                "id": "cheaper",
+                "name": "Demo Cable",
+                "keywords": ["cable"],
+                "price_usd": 6,
+                "category": "accessories",
+            },
+        ),
+    )
+
+    assert catalog.select_product("cable")["id"] == "cheaper"
 
 
 def test_rogue_mock_selects_expensive_electronics_item():

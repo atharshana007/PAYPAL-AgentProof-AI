@@ -9,6 +9,8 @@ PRODUCTS = (
     {
         "id": "usb-c-cable",
         "name": "Braided USB-C Cable",
+        "keywords": ["braided", "usb", "cable", "charging"],
+        "is_demo": True,
         "merchant": "Demo Accessories Shop",
         "category": "accessories",
         "price_usd": 6.99,
@@ -18,6 +20,8 @@ PRODUCTS = (
     {
         "id": "phone-case",
         "name": "Clear Protective Phone Case",
+        "keywords": ["clear", "protective", "phone", "case"],
+        "is_demo": True,
         "merchant": "Flipkart",
         "category": "accessories",
         "price_usd": 8.49,
@@ -25,8 +29,21 @@ PRODUCTS = (
         "image": "/static/images/phone-case.svg",
     },
     {
+        "id": "mobile-phone-case",
+        "name": "Mobile Phone Case",
+        "keywords": ["mobile", "phone", "case", "cover"],
+        "is_demo": True,
+        "merchant": "Demo Accessories Shop",
+        "category": "accessories",
+        "price_usd": 12.99,
+        "price_inr": 999,
+        "image": "/static/images/phone-case.svg",
+    },
+    {
         "id": "desk-organizer",
         "name": "Compact Desk Organizer",
+        "keywords": ["compact", "desk", "organizer", "storage"],
+        "is_demo": True,
         "merchant": "Demo Accessories Shop",
         "category": "accessories",
         "price_usd": 14.99,
@@ -36,6 +53,8 @@ PRODUCTS = (
     {
         "id": "wireless-mouse",
         "name": "Wireless Travel Mouse",
+        "keywords": ["wireless", "travel", "mouse", "computer"],
+        "is_demo": True,
         "merchant": "Flipkart",
         "category": "accessories",
         "price_usd": 19.99,
@@ -45,6 +64,8 @@ PRODUCTS = (
     {
         "id": "bluetooth-speaker",
         "name": "Portable Bluetooth Speaker",
+        "keywords": ["portable", "bluetooth", "speaker", "audio"],
+        "is_demo": True,
         "merchant": "Demo Accessories Shop",
         "category": "electronics",
         "price_usd": 39.99,
@@ -54,6 +75,8 @@ PRODUCTS = (
     {
         "id": "smart-monitor",
         "name": "27-inch Smart Monitor",
+        "keywords": ["smart", "monitor", "display"],
+        "is_demo": True,
         "merchant": "Flipkart",
         "category": "electronics",
         "price_usd": 129.99,
@@ -65,6 +88,28 @@ PRODUCTS = (
 GENERIC_PRODUCT_IMAGE = "/static/images/demo-product.svg"
 _PRODUCTS_BY_ID = {product["id"]: product for product in PRODUCTS}
 _PRODUCTS_BY_NAME = {product["name"].casefold(): product for product in PRODUCTS}
+_WORD_PATTERN = re.compile(r"[a-z0-9]+")
+_WORD_EQUIVALENTS = {"phone": "mobile", "cover": "case"}
+
+
+def _normalized_words(text):
+    return tuple(
+        _WORD_EQUIVALENTS.get(word, word)
+        for word in _WORD_PATTERN.findall(text.casefold())
+    )
+
+
+def product_match(request, product):
+    """Return shared-word occurrence score and unique normalized matched words."""
+    request_words = set(_normalized_words(request))
+    product_words = _normalized_words(product["name"]) + tuple(
+        word
+        for keyword in product["keywords"]
+        for word in _normalized_words(keyword)
+    )
+    matched_words = tuple(sorted(request_words.intersection(product_words)))
+    score = sum(word in request_words for word in product_words)
+    return score, matched_words
 
 
 def requested_category(request):
@@ -80,13 +125,25 @@ def requested_category(request):
 
 
 def select_product(request, rogue=False):
-    category = "electronics" if rogue else requested_category(request)
-    candidates = [
-        product for product in PRODUCTS if product["category"] == category
-    ]
     if rogue:
+        candidates = [
+            product for product in PRODUCTS if product["category"] == "electronics"
+        ]
         product = max(candidates, key=lambda item: item["price_usd"])
+        return dict(product)
+
+    scored = [(product_match(request, product)[0], product) for product in PRODUCTS]
+    best_score = max(score for score, _ in scored)
+    if best_score:
+        product = min(
+            (product for score, product in scored if score == best_score),
+            key=lambda item: item["price_usd"],
+        )
     else:
+        category = requested_category(request)
+        candidates = [
+            product for product in PRODUCTS if product["category"] == category
+        ]
         product = min(candidates, key=lambda item: item["price_usd"])
     return dict(product)
 
