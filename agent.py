@@ -8,6 +8,7 @@ from anthropic.types import ToolParam
 from dotenv import load_dotenv
 
 import auditlog
+import catalog
 import currency as currency_utils
 import mandate
 import paypal
@@ -177,38 +178,31 @@ def _generate_gemini(request, system_prompt) -> tuple[str, dict[str, Any] | None
     return reasoning, None
 
 
-def _generate_mock(request, current, rogue) -> tuple[str, dict[str, Any]]:
+def _generate_mock(
+    request,
+    current,
+    rogue,
+    currency_code=None,
+) -> tuple[str, dict[str, Any]]:
     mandate_data = current["mandate"] if current else {}
     purchase_currency = (
         mandate_data.get("currency", currency_utils.LEGACY_CURRENCY)
         if current
-        else currency_utils.DEFAULT_CURRENCY
+        else currency_code or currency_utils.DEFAULT_CURRENCY
     )
-    budget = mandate_data.get("max_total", 50)
-    try:
-        budget = float(budget)
-    except (TypeError, ValueError):
-        budget = 50
-    categories = mandate_data.get("allowed_categories") or ["books"]
-    merchants = mandate_data.get("allowed_merchants") or ["Demo Store"]
-    if rogue:
-        purchase = {
-            "item": request or "Unauthorized item",
-            "merchant": merchants[0],
-            "category": "__unauthorized_category__",
-            "amount": budget + max(1, abs(budget)),
-            "currency": purchase_currency,
-        }
-        reasoning = "The scripted mock agent is attempting an unauthorized purchase."
-    else:
-        purchase = {
-            "item": request or "Requested item",
-            "merchant": merchants[0],
-            "category": categories[0],
-            "amount": min(max(budget * 0.5, 0.01), 25),
-            "currency": purchase_currency,
-        }
-        reasoning = "The scripted mock agent generated a purchase proposal."
+    product = catalog.select_product(request, rogue=rogue)
+    price = catalog.price_for_currency(product, purchase_currency)
+    purchase = {
+        "item": product["name"],
+        "merchant": product["merchant"],
+        "category": product["category"],
+        "amount": price,
+        "currency": purchase_currency,
+        "product_id": product["id"],
+    }
+    reasoning = (
+        "The scripted mock agent selected a fictional catalog product."
+    )
     return reasoning, purchase
 
 
@@ -242,11 +236,14 @@ def _error_message(provider, error):
     return f"{provider.title()} is temporarily unavailable. Please check the provider configuration and try again."
 
 
-def _record_reasoning(purchase_id, reasoning, tool_call):
+def _record_reasoning(purchase_id, reasoning, tool_call, product=None):
+    data = {"text": reasoning, "tool_call": tool_call}
+    if product:
+        data.update(product)
     auditlog.append_event(
         purchase_id,
         "agent_reasoning",
-        {"text": reasoning, "tool_call": tool_call},
+        data,
     )
 
 
@@ -349,7 +346,9 @@ def run_agent(request: str, rogue: bool = False, currency: str | None = None) ->
         elif provider == "anthropic":
             reasoning, purchase_request = _generate_anthropic(request, system_prompt)
         else:
-            reasoning, purchase_request = _generate_mock(request, current, rogue)
+            reasoning, purchase_request = _generate_mock(
+                request, current, rogue, mandate_currency or requested_currency
+            )
     except Exception as error:
         return _error_result(
             purchase_id,
@@ -357,8 +356,8 @@ def run_agent(request: str, rogue: bool = False, currency: str | None = None) ->
             _error_message(provider, error),
         )
 
-    _record_reasoning(purchase_id, reasoning, purchase_request is not None)
     if purchase_request is None:
+        _record_reasoning(purchase_id, reasoning, False)
         message = "The agent did not request a purchase."
         auditlog.append_event(
             purchase_id, "agent_no_tool_call", {"message": message}
@@ -371,6 +370,11 @@ def run_agent(request: str, rogue: bool = False, currency: str | None = None) ->
             "provider": provider,
         }
 
+    product_details = catalog.describe_purchase(
+        purchase_request, mandate_currency or requested_currency
+    )
+    purchase_request.update(product_details)
+    _record_reasoning(purchase_id, reasoning, True, product_details)
     decision, reason = policy.check_policy(
         current["mandate"] if current else None,
         current["signature"] if current else None,
@@ -384,6 +388,7 @@ def run_agent(request: str, rogue: bool = False, currency: str | None = None) ->
             "decision": decision,
             "reason": reason,
             "currency": mandate_currency or requested_currency,
+            **product_details,
         },
     )
     result = {
@@ -393,6 +398,7 @@ def run_agent(request: str, rogue: bool = False, currency: str | None = None) ->
         "reasoning": reasoning,
         "provider": provider,
         "currency": mandate_currency or requested_currency,
+        **product_details,
     }
     if decision == "ALLOW":
         description = purchase_request.get("item")

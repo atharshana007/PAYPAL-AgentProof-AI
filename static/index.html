@@ -172,6 +172,36 @@
     .status { font-weight:700; }
     .status-label { display:block; margin-bottom:3px; font-weight:800; }
     .decision-title { display:block; font-size:24px; line-height:1.25; font-weight:800; }
+    .decision-summary {
+      display:flex;
+      align-items:flex-start;
+      gap:14px;
+      flex-wrap:wrap;
+      margin-bottom:12px;
+    }
+    .decision-summary .decision-title {
+      padding:5px 10px;
+      border:1px solid currentColor;
+      border-radius:8px;
+    }
+    .demo-product-card {
+      display:block;
+      min-width:210px;
+      max-width:100%;
+      padding:10px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#fff;
+      color:var(--navy);
+    }
+    .demo-product-info { min-width:0; }
+    .demo-product-name { display:block; font-weight:800; overflow-wrap:anywhere; }
+    .demo-product-merchant,.demo-product-price,.demo-product-note {
+      display:block;
+      color:var(--muted);
+      font-size:12px;
+    }
+    .demo-product-price { color:var(--blue); font-size:14px; font-weight:800; }
     .decision-panel p { margin:8px 0 0; }
     .decision-reason { font-weight:600; }
     .approval-link { display:inline-flex; align-items:center; min-height:44px; margin-top:10px; color:var(--blue); font-weight:800; }
@@ -268,9 +298,9 @@
           <label id="budgetLabel" for="budget">Maximum total (INR ₹)</label>
           <input id="budget" name="budget" type="number" min="0.01" step="0.01" value="50" required>
           <label for="categories">Allowed categories <span class="small">(comma-separated)</span></label>
-          <input id="categories" name="categories" value="books" required>
+          <input id="categories" name="categories" value="accessories" required>
           <label for="merchants">Allowed merchants <span class="small">(comma-separated)</span></label>
-          <input id="merchants" name="merchants" value="Demo Store" required>
+          <input id="merchants" name="merchants" value="Demo Accessories Shop, Flipkart" required>
           <label for="expiry">Mandate expires</label>
           <input id="expiry" name="expiry" type="datetime-local" required>
           <button id="createMandate" type="submit">Create mandate</button>
@@ -569,7 +599,35 @@
       const heading = document.createElement("strong");
       heading.className = "decision-title";
       heading.textContent = decision;
-      result.append(heading);
+      const decisionSummary = document.createElement("div");
+      decisionSummary.className = "decision-summary";
+      decisionSummary.append(heading);
+      if (data.product_name) {
+        const productName = String(data.product_name);
+        const productCard = document.createElement("article");
+        productCard.className = "demo-product-card";
+        const productInfo = document.createElement("div");
+        productInfo.className = "demo-product-info";
+        const name = document.createElement("span");
+        name.className = "demo-product-name";
+        name.textContent = productName;
+        const merchant = document.createElement("span");
+        merchant.className = "demo-product-merchant";
+        merchant.textContent = purchase?.merchant || "Demo catalog merchant";
+        const price = document.createElement("span");
+        price.className = "demo-product-price";
+        const productCurrency = data.currency || purchase?.currency;
+        price.textContent = productCurrency
+          ? `${formatAmount(data.price ?? purchase?.amount, productCurrency)} (${productCurrency})`
+          : "Price unavailable";
+        const note = document.createElement("span");
+        note.className = "demo-product-note";
+        note.textContent = "Demo catalog, no real shop";
+        productInfo.append(name, merchant, price, note);
+        productCard.append(productInfo);
+        decisionSummary.append(productCard);
+      }
+      result.append(decisionSummary);
       const reason = document.createElement("p");
       reason.className = "decision-reason";
       reason.textContent = data.reason || "No decision reason was provided.";

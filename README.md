@@ -9,6 +9,7 @@ Agents will soon spend money for us, but nobody can prove who authorized what. A
 3. **Hash-chained log:** Requests, mandate terms, reasoning, policy decisions, and payment events are recorded in SQLite and linked by hashes so edits can be detected.
 4. **Dispute report:** A report gathers the recorded facts for a purchase, reports the chain status, and provides a plain-English summary.
 5. **Currency:** Select India (INR) or United States (USD) in the top navigation. India is the default, and the selection is saved on this device. Each mandate is signed in its selected currency; changing country requires creating a new mandate before a purchase can proceed. Amounts are entered directly in that currency; the app does not convert prices.
+6. **Demo catalog:** The scripted mock agent selects from six fictional products with original local SVG placeholders. Product names and prices are sample data only; no real shop, logo, product photo, or live price is used.
 
 ```text
  User

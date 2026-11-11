@@ -17,13 +17,13 @@ def main():
     database_path = Path(
         os.getenv("DB_PATH", str(auditlog.DEFAULT_DB_PATH))
     )
-    expires_at = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
     demo_mandate = {
         "user": "Demo User",
         "max_total": 50,
         "currency": "INR",
         "allowed_categories": ["accessories"],
-        "allowed_merchants": ["Demo Accessories Shop"],
+        "allowed_merchants": ["Demo Accessories Shop", "Flipkart"],
         "expires_at": expires_at,
     }
 

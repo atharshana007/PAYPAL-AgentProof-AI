@@ -435,6 +435,19 @@ def test_provider_defaults_to_mock_without_provider_keys(monkeypatch, signed_man
     monkeypatch.delenv("AGENT_PROVIDER", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    mandate_data = mandate.create_mandate(
+        user="demo-user",
+        max_total=100,
+        allowed_categories=["accessories"],
+        allowed_merchants=["Demo Accessories Shop", "Flipkart"],
+        expires_at=signed_mandate["mandate"]["expires_at"],
+        currency="INR",
+    )
+    saved_mandate = {
+        "mandate": mandate_data,
+        "signature": mandate.sign_mandate(mandate_data),
+    }
+    monkeypatch.setattr(mandate, "get_current", lambda: saved_mandate)
     monkeypatch.setattr(paypal, "get_access_token", lambda: "test-access-token")
     monkeypatch.setattr(
         paypal,
@@ -449,9 +462,65 @@ def test_provider_defaults_to_mock_without_provider_keys(monkeypatch, signed_man
 
     assert result["provider"] == "mock"
     assert result["decision"] == "ALLOW"
+    assert result["product_name"] == "Braided USB-C Cable"
+    assert result["price"] == 49
+    result_events = [
+        event
+        for event in auditlog.get_log()
+        if event["purchase_id"] == result["purchase_id"]
+    ]
+    reasoning = next(
+        event for event in result_events if event["event_type"] == "agent_reasoning"
+    )
+    decision = next(
+        event for event in result_events if event["event_type"] == "policy_decision"
+    )
+    for event in (reasoning, decision):
+        assert event["data"]["product_name"] == "Braided USB-C Cable"
+        assert event["data"]["product_image"] == "/static/images/usb-c-cable.svg"
+        assert event["data"]["price"] == 49
 
 
 def test_mock_proposal_uses_india_currency_without_a_mandate():
     _, purchase = agent._generate_mock("Buy a book", None, rogue=False)
 
     assert purchase["currency"] == "INR"
+
+
+def test_mock_electronics_purchase_uses_signed_usd_catalog_price(
+    monkeypatch, signed_mandate
+):
+    current = signed_mandate["mandate"]
+    usd_mandate = mandate.create_mandate(
+        user=current["user"],
+        max_total=100,
+        allowed_categories=["electronics"],
+        allowed_merchants=["Demo Accessories Shop", "Flipkart"],
+        expires_at=current["expires_at"],
+        currency="USD",
+    )
+    saved_mandate = {
+        "mandate": usd_mandate,
+        "signature": mandate.sign_mandate(usd_mandate),
+    }
+    monkeypatch.setattr(mandate, "get_current", lambda: saved_mandate)
+    monkeypatch.setenv("AGENT_PROVIDER", "mock")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(paypal, "get_access_token", lambda: "test-access-token")
+    monkeypatch.setattr(
+        paypal,
+        "create_order",
+        lambda *args, **kwargs: {
+            "order_id": "USD-CATALOG-ORDER",
+            "approval_link": "https://sandbox.example/usd-catalog-order",
+        },
+    )
+
+    result = agent.run_agent("Buy electronics", currency="USD")
+
+    assert result["decision"] == "ALLOW"
+    assert result["product_name"] == "Portable Bluetooth Speaker"
+    assert result["product_image"] == "/static/images/bluetooth-speaker.svg"
+    assert result["price"] == 39.99
+    assert result["currency"] == "USD"
